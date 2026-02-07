@@ -1,0 +1,150 @@
+/* Google Fonts - Press Start 2P */
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+:root {
+  --retro-bg: #5c94fc;
+  /* Mario Sky Blue */
+  --retro-ground: #c84c0c;
+  /* Ground Brick/Block logic color */
+  --retro-text: #ffffff;
+  --retro-black: #000000;
+  --retro-yellow: #fbd000;
+  /* Coin Yellow */
+  --retro-red: #e52521;
+  /* Mario Red */
+  --retro-green: #43b047;
+  /* Pipe Green */
+  --retro-font: 'Press Start 2P', cursive;
+}
+
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+body {
+  font-family: var(--retro-font);
+  background-color: var(--retro-bg);
+  color: var(--retro-text);
+  overflow-x: hidden;
+  image-rendering: pixelated;
+  min-height: 100vh;
+}
+
+/* Common Utility Classes */
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+/* NES-style Containers */
+.nes-container {
+  background-color: var(--retro-black);
+  border: 4px solid #fff;
+  padding: 20px;
+  margin-bottom: 20px;
+  position: relative;
+  box-shadow: 8px 8px 0px rgba(0, 0, 0, 0.5);
+}
+
+.nes-container.is-rounded {
+  border-image-slice: 2;
+  border-image-width: 2;
+  border-image-repeat: stretch;
+  border-style: solid;
+  border-color: #fff;
+}
+
+/* Buttons */
+.nes-btn {
+  border: 4px solid #fff;
+  padding: 10px 20px;
+  margin: 5px;
+  cursor: pointer;
+  text-transform: uppercase;
+  font-family: var(--retro-font);
+  font-size: 14px;
+  display: inline-block;
+  text-align: center;
+  text-decoration: none;
+  background-color: var(--retro-green);
+  /* Default action */
+  color: #fff;
+  transition: transform 0.1s;
+  box-shadow: 4px 4px 0px rgba(0, 0, 0, 0.5);
+}
+
+.nes-btn:active {
+  transform: translate(4px, 4px);
+  box-shadow: none;
+}
+
+.nes-btn.is-primary {
+  background-color: var(--retro-red);
+}
+
+.nes-btn.is-warning {
+  background-color: var(--retro-yellow);
+  color: #000;
+}
+
+.nes-btn.is-success {
+  background-color: var(--retro-green);
+}
+
+.nes-btn.is-error {
+  background-color: #e76e55;
+}
+
+/* Retro Clouds Animation Background helper */
+.clouds-bg {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.cloud {
+  width: 200px;
+  height: 60px;
+  background: #fff;
+  border-radius: 200px;
+  position: absolute;
+}
+
+.cloud:before,
+.cloud:after {
+  content: '';
+  position: absolute;
+  background: #fff;
+  width: 100px;
+  height: 80px;
+  position: absolute;
+  top: -15px;
+  left: 10px;
+  border-radius: 100px;
+  transform: rotate(30deg);
+}
+
+.cloud:after {
+  width: 120px;
+  height: 120px;
+  top: -55px;
+  left: auto;
+  right: 15px;
+}
+
+/* Utility to center content */
+.center-screen {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+}

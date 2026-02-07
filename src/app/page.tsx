@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 export default function Home() {
   const [stars, setStars] = useState<{ top: string, left: string, delay: string }[]>([]);
+  const [equalizerBars, setEqualizerBars] = useState<{ delay: string; height: string }[]>([]);
   const [isGameStarted, setIsGameStarted] = useState(false);
 
 
@@ -16,6 +17,13 @@ export default function Home() {
       delay: `${Math.random() * 2}s`,
     }));
     setStars(newStars);
+
+    // Generate equalizer bars randomly on client
+    const newBars = Array.from({ length: 20 }).map(() => ({
+      delay: `${Math.random() * 1.5}s`,
+      height: `${20 + Math.random() * 50}%`
+    }));
+    setEqualizerBars(newBars);
   }, []);
 
   return (
@@ -36,6 +44,34 @@ export default function Home() {
             }}
           ></div>
         ))}
+      </div>
+
+      {/* Equalizer Bars */}
+      <div className="equalizer-container">
+        {equalizerBars.map((bar, i) => (
+          <div
+            key={i}
+            className="eq-bar"
+            style={{
+              animationDelay: bar.delay,
+              height: bar.height
+            }}
+          ></div>
+        ))}
+      </div>
+
+      {/* XP Bars */}
+      <div className="xp-ui top-left">
+        <div className="xp-label">PLAYER 1</div>
+        <div className="xp-bar">
+          <div className="xp-fill p1"></div>
+        </div>
+      </div>
+      <div className="xp-ui p2-stacked">
+        <div className="xp-label">PLAYER 2</div>
+        <div className="xp-bar">
+          <div className="xp-fill p2"></div>
+        </div>
       </div>
 
       {/* Main Menu */}

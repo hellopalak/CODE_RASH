@@ -5,10 +5,12 @@ import { useEffect, useState } from "react";
 
 export default function Home() {
   const [stars, setStars] = useState<{ top: string, left: string, delay: string }[]>([]);
+  const [isGameStarted, setIsGameStarted] = useState(false);
+
 
   useEffect(() => {
     // Generate static stars on client only to avoid hydration mismatch
-    const newStars = Array.from({ length: 50 }).map(() => ({
+    const newStars = Array.from({ length: 200 }).map(() => ({
       top: `${Math.random() * 100}%`,
       left: `${Math.random() * 100}%`,
       delay: `${Math.random() * 2}s`,
@@ -37,33 +39,39 @@ export default function Home() {
       </div>
 
       {/* Main Menu */}
-      <div className="nes-container is-rounded" style={{ textAlign: "center", backgroundColor: "rgba(0,0,0,0.6)", backdropFilter: "blur(2px)" }}>
-        <h1 style={{ color: "#fbd000", textShadow: "4px 4px #e52521", fontSize: "3rem", marginBottom: "2rem", fontFamily: "'Press Start 2P', cursive" }}>
-          CODE RASH
-        </h1>
+      {/* Main Menu Area */}
+      {!isGameStarted ? (
+        <>
+          <h1 className="retro-main-title">CODE RASH</h1>
+          <div className="press-start-container" onClick={() => setIsGameStarted(true)}>
+            <div className="arcade-header">THE ULTIMATE CODING ARENA</div>
+            <div className="press-btn-box">
+              <span className="blink-arrow">▶</span> PRESS START <span className="blink-arrow">◀</span>
+            </div>
+            <div className="insert-coin blink-text">INSERT COIN</div>
+            <div className="arcade-footer">CREDITS 00 • FREE PLAY</div>
+          </div>
+        </>
+      ) : (
+        <div className="nes-container is-rounded" style={{ textAlign: "center", backgroundColor: "rgba(0,0,0,0.8)", backdropFilter: "blur(4px)", animation: "fadeIn 0.5s" }}>
+          <h1 style={{ color: "#fbd000", textShadow: "4px 4px #e52521", fontSize: "2.5rem", marginBottom: "2rem", fontFamily: "'Press Start 2P', cursive" }}>
+            SELECT PLAYER
+          </h1>
 
-        <p style={{ marginBottom: "2rem", color: "#fff", textShadow: "2px 2px #000" }}>Select your Player Mode:</p>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-          <Link href="/login?role=user">
-            <button className="nes-btn is-primary" style={{ width: "250px" }}>
-              USER START
-            </button>
-          </Link>
-
-          <Link href="/login?role=evaluator">
-            <button className="nes-btn is-warning" style={{ width: "250px" }}>
-              EVALUATOR LOGIN
-            </button>
-          </Link>
-
-          <Link href="/login?role=admin">
-            <button className="nes-btn is-error" style={{ width: "250px" }}>
-              ADMIN ZONE
-            </button>
-          </Link>
+          <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+            <Link href="/login?role=user">
+              <button className="nes-btn is-primary" style={{ width: "280px" }}>USER START</button>
+            </Link>
+            <Link href="/login?role=evaluator">
+              <button className="nes-btn is-warning" style={{ width: "280px" }}>EVALUATOR LOGIN</button>
+            </Link>
+            <Link href="/login?role=admin">
+              <button className="nes-btn is-error" style={{ width: "280px" }}>ADMIN ZONE</button>
+            </Link>
+            <button className="nes-btn" onClick={() => setIsGameStarted(false)} style={{ marginTop: "1rem" }}>BACK</button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Mario Hurdle Race Bottom Animation */}
       <div className="race-track">

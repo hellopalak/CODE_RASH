@@ -4,6 +4,7 @@
 export const ALLOWED_USERS = [
     "user1@example.com",
     "user2@example.com",
+    "advancedlooser70@gmail.com",
 ];
 
 export const ALLOWED_EVALUATORS = [

@@ -3,25 +3,42 @@
 import { Suspense, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { checkAccess } from "@/lib/allowlist";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { auth } from "@/lib/firebase";
 
 function LoginForm() {
     const searchParams = useSearchParams();
     const router = useRouter();
     const role = searchParams.get("role") || "user";
     const [email, setEmail] = useState("");
+    const [password, setPassword] = useState("");
     const [error, setError] = useState("");
 
-    const handleLogin = (e: React.FormEvent) => {
+    const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (checkAccess(email, role)) {
-            // In a real app, successful Firebase auth would happen here.
-            // For now, we simulate success and redirect.
-            // We could set a cookie/localStorage here for persistence.
-            if (role === "admin") router.push("/admin");
-            else if (role === "evaluator") router.push("/evaluator");
-            else router.push("/dashboard");
-        } else {
-            setError("Access Denied: Email not authorized for this role.");
+        setError(""); // Clear previous errors
+
+        try {
+            // 1. Authenticate with Firebase
+            // const userCredential = await signInWithEmailAndPassword(auth, email, password);
+            // const user = userCredential.user;
+
+            // For now, we are simulating the auth because we need the user to set up env vars first.
+            // But I will leave the structure ready for when they do.
+
+            // SIMULATION (Remove this when Env Vars are set)
+            // if (password !== "password") throw new Error("Wrong password (for simulation use 'password')");
+
+            // 2. Check Access Control (Role-based)
+            if (checkAccess(email, role)) {
+                if (role === "admin") router.push("/admin");
+                else if (role === "evaluator") router.push("/evaluator");
+                else router.push("/dashboard");
+            } else {
+                setError("Access Denied: Email not authorized for this role.");
+            }
+        } catch (err: any) {
+            setError(err.message || "Failed to login.");
         }
     };
 
@@ -48,6 +65,26 @@ function LoginForm() {
                             border: "4px solid #fff"
                         }}
                         placeholder="enter@email.com"
+                        required
+                    />
+                </div>
+
+                <div style={{ marginBottom: "10px" }}>
+                    <label style={{ display: "block", marginBottom: "5px", color: "#fff" }}>Password:</label>
+                    <input
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className="nes-input"
+                        style={{
+                            width: "100%",
+                            padding: "10px",
+                            fontFamily: "inherit",
+                            backgroundColor: "#222",
+                            color: "#fff",
+                            border: "4px solid #fff"
+                        }}
+                        placeholder="••••••••"
                         required
                     />
                 </div>

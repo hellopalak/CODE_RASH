@@ -7,6 +7,8 @@ export default function Home() {
   const [stars, setStars] = useState<{ top: string, left: string, delay: string }[]>([]);
   const [equalizerBars, setEqualizerBars] = useState<{ delay: string; height: string }[]>([]);
   const [isGameStarted, setIsGameStarted] = useState(false);
+  const [isAdminVisible, setIsAdminVisible] = useState(false);
+  const [keystrokes, setKeystrokes] = useState<string[]>([]);
 
 
   useEffect(() => {
@@ -24,6 +26,20 @@ export default function Home() {
       height: `${20 + Math.random() * 50}%`
     }));
     setEqualizerBars(newBars);
+
+    // Secret Cheat Code Listener
+    const handleKeyDown = (e: KeyboardEvent) => {
+      setKeystrokes((prev) => {
+        const newKeys = [...prev, e.key].slice(-5); // Keep last 5 keys
+        if (newKeys.join("").toLowerCase() === "admin") {
+          setIsAdminVisible(true);
+        }
+        return newKeys;
+      });
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
   return (
@@ -74,7 +90,6 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Main Menu */}
       {/* Main Menu Area */}
       {!isGameStarted ? (
         <>
@@ -89,23 +104,43 @@ export default function Home() {
           </div>
         </>
       ) : (
-        <div className="nes-container is-rounded" style={{ textAlign: "center", backgroundColor: "rgba(0,0,0,0.8)", backdropFilter: "blur(4px)", animation: "fadeIn 0.5s" }}>
-          <h1 style={{ color: "#fbd000", textShadow: "4px 4px #e52521", fontSize: "2.5rem", marginBottom: "2rem", fontFamily: "'Press Start 2P', cursive" }}>
-            SELECT PLAYER
-          </h1>
+        <div style={{ position: 'relative', zIndex: 20 }}>
+          {/* Default View: Contestant Card */}
+          {!isAdminVisible ? (
+            <div className="contestant-card-container" style={{ animation: "fadeIn 0.5s" }}>
+              <div className="scanline-overlay"></div>
+              <div className="card-content">
+                <div className="pixel-alien">👾</div>
+                <h1 className="contestant-title">CONTESTANT</h1>
+                <p className="contestant-desc">Join the arena. Solve problems. Win glory.</p>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-            <Link href="/login?role=user">
-              <button className="nes-btn is-primary" style={{ width: "280px" }}>USER START</button>
-            </Link>
-            <Link href="/login?role=evaluator">
-              <button className="nes-btn is-warning" style={{ width: "280px" }}>EVALUATOR LOGIN</button>
-            </Link>
-            <Link href="/login?role=admin">
-              <button className="nes-btn is-error" style={{ width: "280px" }}>ADMIN ZONE</button>
-            </Link>
-            <button className="nes-btn" onClick={() => setIsGameStarted(false)} style={{ marginTop: "1rem" }}>BACK</button>
-          </div>
+                <Link href="/login?role=user" style={{ width: '100%' }}>
+                  <button className="player-ready-btn">1 PLAYER READY</button>
+                </Link>
+
+                <button className="nes-btn is-error" onClick={() => setIsGameStarted(false)} style={{ marginTop: "1rem", fontSize: "0.6rem", padding: "5px 10px", width: "auto" }}>EXIT</button>
+              </div>
+            </div>
+          ) : (
+            /* Secret View: Admin/Evaluator Login */
+            <div className="nes-container is-rounded" style={{ textAlign: "center", backgroundColor: "rgba(0,0,0,0.9)", backdropFilter: "blur(4px)", animation: "fadeIn 0.5s", borderColor: "#fbd000" }}>
+              <h1 style={{ color: "#fbd000", textShadow: "4px 4px #e52521", fontSize: "2rem", marginBottom: "1.5rem", fontFamily: "'Press Start 2P', cursive" }}>
+                SECRET MENU
+              </h1>
+              <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                <Link href="/login?role=user">
+                  <button className="nes-btn is-primary" style={{ width: "280px" }}>USER START</button>
+                </Link>
+                <Link href="/login?role=evaluator">
+                  <button className="nes-btn is-warning" style={{ width: "280px" }}>EVALUATOR LOGIN</button>
+                </Link>
+                <Link href="/login?role=admin">
+                  <button className="nes-btn is-error" style={{ width: "280px" }}>ADMIN ZONE</button>
+                </Link>
+                <button className="nes-btn" onClick={() => setIsAdminVisible(false)} style={{ marginTop: "1rem" }}>CLOSE SECRET</button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

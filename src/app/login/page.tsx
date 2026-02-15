@@ -29,13 +29,18 @@ function LoginForm() {
             // SIMULATION (Remove this when Env Vars are set)
             // if (password !== "password") throw new Error("Wrong password (for simulation use 'password')");
 
-            // 2. Check Access Control (Role-based)
-            if (checkAccess(email, role)) {
+            // 2. Check Access Control (Role-based & Password)
+            const allowed = await checkAccess(email, role, password);
+
+            if (allowed) {
                 if (role === "admin") router.push("/admin");
                 else if (role === "evaluator") router.push("/evaluator");
-                else router.push("/dashboard");
+                else {
+                    localStorage.setItem("contest_user_email", email);
+                    router.push("/dashboard");
+                }
             } else {
-                setError("Access Denied: Email not authorized for this role.");
+                setError("Access Denied: Invalid email, password, or role.");
             }
         } catch (err: any) {
             setError(err.message || "Failed to login.");

@@ -77,7 +77,7 @@ export default function Home() {
       </div>
 
       {/* XP Bars */}
-      <div className="xp-ui top-left">
+      {/* <div className="xp-ui top-left">
         <div className="xp-label">PLAYER 1</div>
         <div className="xp-bar">
           <div className="xp-fill p1"></div>
@@ -88,7 +88,7 @@ export default function Home() {
         <div className="xp-bar">
           <div className="xp-fill p2"></div>
         </div>
-      </div>
+      </div> */}
 
       {/* Main Menu Area */}
       {!isGameStarted ? (
@@ -100,7 +100,7 @@ export default function Home() {
               <span className="blink-arrow">▶</span> PRESS START <span className="blink-arrow">◀</span>
             </div>
             <div className="insert-coin blink-text">INSERT COIN</div>
-            <div className="arcade-footer">CREDITS 00 • FREE PLAY</div>
+            {/* <div className="arcade-footer">CREDITS 00 • FREE PLAY</div> */}
           </div>
         </>
       ) : (

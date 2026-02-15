@@ -1,10 +1,11 @@
-// This file simulates the database of allowed users for the contest.
-// In a real scenario, this might fetch from Firestore or a GSheet.
+import { db } from "./firebase";
+import { doc, getDoc } from "firebase/firestore";
 
 export const ALLOWED_USERS = [
     "user1@example.com",
     "user2@example.com",
     "advancedlooser70@gmail.com",
+    "parv@gmail.com",
 ];
 
 export const ALLOWED_EVALUATORS = [
@@ -13,11 +14,47 @@ export const ALLOWED_EVALUATORS = [
 
 export const ALLOWED_ADMINS = [
     "admin@example.com",
+    "palak@example.com"
 ];
 
-export const checkAccess = (email: string, role: string): boolean => {
-    if (role === 'admin') return ALLOWED_ADMINS.includes(email);
-    if (role === 'evaluator') return ALLOWED_EVALUATORS.includes(email);
-    if (role === 'user') return ALLOWED_USERS.includes(email);
+/**
+ * Checks if an email is authorized for a specific role.
+ * Uses Firestore 'allowed_users' collection (Doc ID = email).
+ * Fallback to static list for Admins to prevent lockout.
+ */
+export const checkAccess = async (email: string, role: string, passwordInput?: string): Promise<boolean> => {
+    // 1. Static Fallback (Critical for Admin access if DB fails/is empty)
+    if (role === 'admin' && ALLOWED_ADMINS.includes(email)) return true;
+
+    // 2. Frontend Simulation Fallback (Removes in favor of DB for users)
+    // if (role === 'user' && ALLOWED_USERS.includes(email)) return true;
+
+    try {
+        // Check Firestore: allowed_users/{email} -> { role: "user", password: "..." }
+        const docRef = doc(db, "allowed_users", email);
+        const docSnap = await getDoc(docRef);
+
+        if (docSnap.exists()) {
+            const data = docSnap.data();
+
+            // Check Role
+            let roleOk = (data.role === role) || (data.role === 'admin');
+
+            // Check Password (if it exists in DB)
+            let passOk = true;
+            if (data.password) {
+                if (passwordInput && data.password === passwordInput) {
+                    passOk = true;
+                } else {
+                    passOk = false; // Pass required but wrong/missing
+                }
+            }
+
+            if (roleOk && passOk) return true;
+        }
+    } catch (error) {
+        console.error("Error checking allowlist:", error);
+    }
+
     return false;
 };

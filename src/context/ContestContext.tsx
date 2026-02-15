@@ -2,6 +2,8 @@
 
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import { db } from "@/lib/firebase";
+import { doc, onSnapshot, updateDoc, setDoc, Timestamp, getDoc } from "firebase/firestore";
 
 interface RoundStatus {
     id: 1 | 2 | 3 | 4;
@@ -18,9 +20,9 @@ interface ContestContextType {
     completedRounds: number[];
     unlockNextRound: () => void;
     startContest: () => void;
-    adminSetRound: (id: number) => void;
-    adminSetTimer: (seconds: number) => void;
-    adminResetContest: () => void;
+    adminSetRound: (id: number) => Promise<void>;
+    adminSetTimer: (seconds: number) => Promise<void>;
+    adminResetContest: () => Promise<void>;
 }
 
 const ContestContext = createContext<ContestContextType | null>(null);
@@ -35,15 +37,12 @@ export const ContestProvider = ({ children }: { children: React.ReactNode }) => 
     const router = useRouter();
     const pathname = usePathname();
 
-    // Persisted State (could be localStorage)
     const [currentRoundId, setCurrentRoundId] = useState<number>(1);
     const [completedRounds, setCompletedRounds] = useState<number[]>([]);
+    const [timer, setTimer] = useState(900); // Default 15m
+    const [roundEndTime, setRoundEndTime] = useState<number | null>(null);
 
-    // Timers
-    // Round 1: 15m (900s)
-    // Round 2: 30m (1800s)
-    // Round 3: 15m (900s)
-    // Round 4: 2h (7200s)
+    // Round Durations
     const ROUND_DURATIONS: Record<number, number> = {
         1: 900,
         2: 1800,
@@ -51,104 +50,168 @@ export const ContestProvider = ({ children }: { children: React.ReactNode }) => 
         4: 7200
     };
 
-    const [timer, setTimer] = useState(ROUND_DURATIONS[1]);
-    const [isActive, setIsActive] = useState(false);
-
-    // Initial Load / Sync & Cross-Tab Listener
+    // --- 1. SYNC WITH FIRESTORE & PRESENCE HEARTBEAT ---
     useEffect(() => {
-        const loadState = () => {
-            const savedRound = localStorage.getItem("contest_round");
-            if (savedRound) {
-                const rId = parseInt(savedRound, 10);
-                setCurrentRoundId(rId);
-                // Only reset timer if we moved rounds, otherwise keep running? 
-                // For simplicity, we trust the local timer unless forced.
+        // A. Global State Sync
+        const unsubGlobal = onSnapshot(doc(db, "contest", "global_state"), (docSnap) => {
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                if (data.currentRoundId) {
+                    setCurrentRoundId(data.currentRoundId);
+                    localStorage.setItem("contest_round", data.currentRoundId.toString());
+                }
+                if (data.roundEndTime) {
+                    setRoundEndTime(data.roundEndTime.toMillis());
+                }
+            }
+        });
+
+        // B. User Presence / Heartbeat
+        let heartbeatInterval: NodeJS.Timeout;
+        const myEmail = localStorage.getItem("contest_user_email");
+
+        if (myEmail) {
+            const userDocRef = doc(db, "users", myEmail);
+
+            // 1. Initial "Online" Status
+            const setOnline = async () => {
+                try {
+                    // Try to get team/name from allowed_users if possible, but basic info first
+                    await setDoc(userDocRef, {
+                        id: myEmail,
+                        name: myEmail.split("@")[0], // Fallback name
+                        status: "Online",
+                        lastActive: Timestamp.now(),
+                        round: currentRoundId // Track which round they are on
+                    }, { merge: true });
+                } catch (e) {
+                    console.error("Presence Error:", e);
+                }
+            };
+            setOnline();
+
+            // 2. Heartbeat (Every 30s)
+            heartbeatInterval = setInterval(async () => {
+                try {
+                    await updateDoc(userDocRef, {
+                        lastActive: Timestamp.now(),
+                        status: "Online"
+                    });
+                } catch (e) {
+                    // Start fresh if doc deleted or network issue
+                    setOnline();
+                }
+            }, 30000);
+        }
+
+        return () => {
+            unsubGlobal();
+            if (heartbeatInterval) clearInterval(heartbeatInterval);
+
+            // Optional: Set Offline on unmount (refresh/close)
+            if (myEmail) {
+                // We use Beacon API for reliability on close, but basic firestore here helps
+                // Note: This might flap on simple nav, but Next.js SPA nav doesn't unmount context usually.
+                // updateDoc(doc(db, "users", myEmail), { status: "Offline" }).catch(()=>{});
             }
         };
-        loadState();
-
-        const handleStorageChange = (e: StorageEvent) => {
-            if (e.key === "contest_round") {
-                loadState();
-            }
-            if (e.key === "contest_force_timer") {
-                const newTime = parseInt(e.newValue || "0", 10);
-                if (!isNaN(newTime)) setTimer(newTime);
-            }
-            if (e.key === "contest_reset_signal") {
-                // Hard reset
-                setCurrentRoundId(1);
-                setTimer(ROUND_DURATIONS[1]);
-                setCompletedRounds([]);
-                localStorage.removeItem("contest_round");
-                router.push("/round1");
-            }
-        };
-
-        window.addEventListener("storage", handleStorageChange);
-        return () => window.removeEventListener("storage", handleStorageChange);
     }, []);
 
-    // Timer Logic
+    // --- 1.5 SEPARATE HEARTBEAT (Depends on Round) ---
     useEffect(() => {
-        if (!isActive) return;
+        const myEmail = localStorage.getItem("contest_user_email");
+        if (!myEmail) return;
+
+        const userDocRef = doc(db, "users", myEmail);
+
+        // Update Round Progress & Team Name
+        const updateProgress = async () => {
+            try {
+                // Fetch Team Name from Allowlist if not known (Optimization: could cache in local)
+                let teamName = "Unknown";
+                try {
+                    const allowDoc = await getDoc(doc(db, "allowed_users", myEmail));
+                    if (allowDoc.exists()) {
+                        teamName = allowDoc.data().teamName || "Unknown";
+                    }
+                } catch (err) { console.error("Error fetching team", err); }
+
+                await setDoc(userDocRef, {
+                    id: myEmail,
+                    name: myEmail.split("@")[0],
+                    team: teamName, // Added Team
+                    status: "Online",
+                    lastActive: Timestamp.now(),
+                    round: currentRoundId
+                }, { merge: true });
+            } catch (e) { console.error("Heartbeat error", e); }
+        };
+
+        // Run once immediately
+        updateProgress();
+
+        // Keep Alive Interval
+        const interval = setInterval(() => updateProgress(), 30000);
+        return () => clearInterval(interval);
+    }, [currentRoundId]);
+
+    // --- 2. LOCAL TICKER (Derived from EndTime) ---
+    useEffect(() => {
+        if (!roundEndTime) return;
 
         const interval = setInterval(() => {
-            setTimer(prev => {
-                if (prev <= 1) {
-                    // Time's up!
-                    handleRoundTimeout();
-                    return 0;
-                }
-                return prev - 1;
-            });
+            const now = Date.now();
+            const remaining = Math.max(0, Math.ceil((roundEndTime - now) / 1000));
+
+            setTimer(remaining);
+
+            if (remaining <= 0) {
+                // Timer finished
+                handleRoundTimeout();
+            }
         }, 1000);
 
         return () => clearInterval(interval);
-    }, [isActive, currentRoundId]);
+    }, [roundEndTime]);
 
     const handleRoundTimeout = () => {
-        // Auto-move to next round
-        unlockNextRound();
-    };
-
-    const unlockNextRound = () => {
-        setCompletedRounds(prev => [...prev, currentRoundId]);
-        const nextRound = currentRoundId + 1;
-
-        if (nextRound <= 4) {
-            setCurrentRoundId(nextRound);
-            setTimer(ROUND_DURATIONS[nextRound]);
-            localStorage.setItem("contest_round", nextRound.toString());
-            router.push(`/round${nextRound}`);
-        } else {
-            router.push("/dashboard"); // Or celebration
+        // Auto-unlock logic is tricky with multiple clients.
+        // We let the CLIENT unlock its own view, but we don't necessarily force the Server Round 
+        // unless the Admin does it. 
+        // OR: We just let the timer sit at 0 until Admin moves it.
+        // For this app: We'll locally unlock the next route guard.
+        if (!completedRounds.includes(currentRoundId)) {
+            setCompletedRounds(prev => [...prev, currentRoundId]);
         }
     };
 
-    const startContest = () => {
-        setIsActive(true);
-        // If not already on round 1, redirect
-        if (pathname !== "/round1") router.push("/round1");
+    const unlockNextRound = () => {
+        // This is now mostly an Admin function or local "I'm done" function
+        setCompletedRounds(prev => [...prev, currentRoundId]);
+
+        // If it's a "User Finished" action, we might redirect them to wait.
+        // If it's "Admin Force Next", the Firestore update handles the redirect via useEffect below.
     };
 
-    // Route Protection
+    // --- 3. AUTO-REDIRECT ON ROUND CHANGE ---
     useEffect(() => {
-        // If user tries to access round X but currentRoundId < X, redirect back
+        // If we represent a "User" and the global round changes, we should probably follow it.
+        // Logic: If I am on /round1 and global is /round2 -> Redirect /round2
+
         if (pathname?.startsWith("/round")) {
-            const roundNum = parseInt(pathname.replace("/round", ""), 10);
-            if (!isNaN(roundNum)) {
-                if (roundNum > currentRoundId) {
-                    // Trying to skip ahead
+            const myRound = parseInt(pathname.replace("/round", ""), 10);
+            if (myRound !== currentRoundId) {
+                // If the global round moved AHEAD, pull the user forward.
+                if (currentRoundId > myRound) {
                     router.push(`/round${currentRoundId}`);
-                } else if (roundNum < currentRoundId) {
-                    // Trying to go back (Locked)
-                    // Unless we want to allow reviewing? User said "locked".
+                }
+                // If global round moved BACK (Reset), pull user back.
+                if (currentRoundId < myRound) {
                     router.push(`/round${currentRoundId}`);
                 }
             }
         }
-    }, [pathname, currentRoundId, router]);
+    }, [currentRoundId, pathname, router]);
 
     return (
         <ContestContext.Provider value={{
@@ -156,23 +219,35 @@ export const ContestProvider = ({ children }: { children: React.ReactNode }) => 
             currentRoundId,
             completedRounds,
             unlockNextRound,
-            startContest,
-            // Admin Helpers (Using localStorage as the message bus)
-            adminSetRound: (id: number) => {
-                localStorage.setItem("contest_round", id.toString());
-                setCurrentRoundId(id);
-                setTimer(ROUND_DURATIONS[id]);
-                window.dispatchEvent(new Event("storage")); // Trigger local update too if needed logic
+            startContest: () => { }, // No longer needed with auto-sync
+
+            // ADMIN ACTIONS (Write to Firestore)
+            adminSetRound: async (id: number) => {
+                const duration = ROUND_DURATIONS[id] || 900;
+                // Calculate End Time: Now + Duration
+                const endTime = new Date(Date.now() + duration * 1000);
+
+                await setDoc(doc(db, "contest", "global_state"), {
+                    currentRoundId: id,
+                    roundEndTime: Timestamp.fromDate(endTime)
+                }, { merge: true });
             },
-            adminSetTimer: (seconds: number) => {
-                localStorage.setItem("contest_force_timer", seconds.toString());
-                setTimer(seconds);
+
+            adminSetTimer: async (seconds: number) => {
+                // Adjust End Time: Now + New Seconds
+                const endTime = new Date(Date.now() + seconds * 1000);
+                await updateDoc(doc(db, "contest", "global_state"), {
+                    roundEndTime: Timestamp.fromDate(endTime)
+                });
             },
-            adminResetContest: () => {
-                localStorage.setItem("contest_reset_signal", Date.now().toString());
-                setCurrentRoundId(1);
-                setTimer(ROUND_DURATIONS[1]);
-                setCompletedRounds([]);
+
+            adminResetContest: async () => {
+                // Reset to Round 1, 15m
+                const endTime = new Date(Date.now() + 900 * 1000);
+                await setDoc(doc(db, "contest", "global_state"), {
+                    currentRoundId: 1,
+                    roundEndTime: Timestamp.fromDate(endTime)
+                });
             }
         }}>
             {children}

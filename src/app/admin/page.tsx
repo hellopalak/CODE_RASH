@@ -31,7 +31,16 @@ export default function AdminDashboard() {
         const unsub = onSnapshot(collection(db, "users"), (snapshot) => {
             const fetchedUsers: UserData[] = [];
             snapshot.forEach(doc => {
-                fetchedUsers.push(doc.data() as UserData);
+                const data = doc.data();
+                fetchedUsers.push({
+                    id: doc.id,
+                    name: data.name || "Unknown",
+                    round: data.round || 0,
+                    warnings: data.warnings || 0,
+                    status: data.status || "Offline",
+                    score: data.score,
+                    team: data.team
+                } as UserData);
             });
             setUsers(fetchedUsers);
             setLastUpdated(new Date().toLocaleTimeString());
@@ -203,7 +212,7 @@ export default function AdminDashboard() {
                                     <tbody>
                                         {users.map(user => (
                                             <tr key={user.id}>
-                                                <td style={{ fontSize: "0.75rem", padding: "15px" }}>{user.id.substring(0, 8)}...</td>
+                                                <td style={{ fontSize: "0.75rem", padding: "15px" }}>{(user.id || "").substring(0, 8)}...</td>
                                                 <td style={{ fontWeight: "bold", padding: "15px" }}>{user.name}</td>
                                                 <td style={{ color: "#F7D51D", padding: "15px" }}>{user.team || "-"}</td>
                                                 <td style={{ padding: "15px" }}>Round {user.round}</td>

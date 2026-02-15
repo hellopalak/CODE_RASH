@@ -6,7 +6,7 @@ import AntiCheatGuard from "@/components/AntiCheatGuard";
 import StarBackground from "@/components/StarBackground";
 import { useContest } from "@/context/ContestContext";
 import { db } from "@/lib/firebase";
-import { collection, query, where, getDocs, doc, getDoc } from "firebase/firestore";
+import { collection, query, where, getDocs, doc, getDoc, onSnapshot } from "firebase/firestore";
 
 export default function UserDashboard() {
     const { currentRoundId, currentTimeout } = useContest();
@@ -42,28 +42,29 @@ export default function UserDashboard() {
 
     // --- REAL FETCH IMPLEMENTATION ---
     useEffect(() => {
-        const fetchRealData = async () => {
-            // For this hackathon, let's assume the user is "user1@example.com" if not set.
-            // We need to fetch from 'allowed_users' where we will store Team Name?
-            // OR we store everything in 'users/{uid}'?
-            // Let's go with: Admin set up 'allowed_users'. 
-            // We need to update the Seeder to include Team Names.
-        };
-    }, []);
+        const myEmail = localStorage.getItem("contest_user_email");
+        if (!myEmail) {
+            // Optional: Redirect to login if not found
+            return;
+        }
 
-    // Placeholder Data for now until Seeder is updated
-    useEffect(() => {
-        // Retrieve "score" and "teamName" if available in localStorage to simulating per-user state
-        // or fetched from a real doc.
-        // For the "Clickable" request: handled in UI logic above.
-
-        // Simulating data for preview:
-        setUserData({
-            name: "Contestant",
-            teamName: "ALPHA",
-            score: 0 // Will connect to real DB score later
+        const unsub = onSnapshot(doc(db, "users", myEmail), (docSnap) => {
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                setUserData({
+                    name: data.name || myEmail.split("@")[0],
+                    teamName: data.team || "Unknown",
+                    score: (data.scores?.round1 || 0) + (data.scores?.round3 || 0), // Aggregate score
+                    scores: data.scores || {}, // Store individual scores
+                    completedRoundIds: data.completedRoundIds || []
+                });
+            }
         });
+
+        return () => unsub();
     }, []);
+    // Placeholder or fallback if needed, but we rely on real fetch now.
+    // If we want to show loading state, we can add that later.
 
     return (
         <div style={{ position: "relative", minHeight: "100vh" }}>
@@ -79,7 +80,7 @@ export default function UserDashboard() {
 
                         {/* TIMER DISPLAY */}
                         <div className="nes-badge is-splited" style={{ margin: "10px 0" }}>
-                            <span className="is-dark">TIME LEFT</span>
+                            <span className="is-dark">TIME LEFT </span>
                             <span className={currentTimeout < 60 ? "is-error" : "is-warning"}>
                                 {Math.floor(currentTimeout / 60)}:{(currentTimeout % 60).toString().padStart(2, '0')}
                             </span>
@@ -113,10 +114,16 @@ export default function UserDashboard() {
                                     {currentRoundId < 1 && <span>🔒</span>}
                                     <p style={{ margin: 0 }}>ROUND 1: QUIZ</p>
                                 </div>
-                                {currentRoundId === 1 ? (
+                                {userData?.completedRoundIds?.includes(1) ? (
+                                    <div style={{ textAlign: "right" }}>
+                                        <span style={{ color: "#92cc41", display: "block" }}>COMPLETED</span>
+                                        <span style={{ fontSize: "0.8rem", color: "yellow" }}>SCORE: {userData?.scores?.round1 || 0}</span>
+                                        {currentRoundId === 1 && <span style={{ display: "block", fontSize: "0.6rem", color: "#666" }}>WAITING FOR NEXT ROUND...</span>}
+                                    </div>
+                                ) : currentRoundId === 1 ? (
                                     <Link href="/round1"><button className="nes-btn is-primary">START</button></Link>
                                 ) : currentRoundId > 1 ? (
-                                    <span style={{ color: "#92cc41" }}>COMPLETED</span>
+                                    <span style={{ color: "#92cc41" }}>SKIPPED/DONE</span>
                                 ) : <button className="nes-btn is-disabled">LOCKED</button>}
                             </div>
 
@@ -126,7 +133,12 @@ export default function UserDashboard() {
                                     {currentRoundId < 2 && <span>🔒</span>}
                                     <p style={{ margin: 0 }}>ROUND 2: DSA</p>
                                 </div>
-                                {currentRoundId === 2 ? (
+                                {userData?.completedRoundIds?.includes(2) ? (
+                                    <div style={{ textAlign: "right" }}>
+                                        <span style={{ color: "#92cc41", display: "block" }}>SUBMITTED</span>
+                                        {currentRoundId === 2 && <span style={{ display: "block", fontSize: "0.6rem", color: "#666" }}>WAITING FOR NEXT ROUND...</span>}
+                                    </div>
+                                ) : currentRoundId === 2 ? (
                                     <Link href="/round2"><button className="nes-btn is-warning">ENTER</button></Link>
                                 ) : currentRoundId > 2 ? (
                                     <span style={{ color: "#92cc41" }}>COMPLETED</span>
@@ -139,10 +151,16 @@ export default function UserDashboard() {
                                     {currentRoundId < 3 && <span>🔒</span>}
                                     <p style={{ margin: 0 }}>ROUND 3: TECH</p>
                                 </div>
-                                {currentRoundId === 3 ? (
+                                {userData?.completedRoundIds?.includes(3) ? (
+                                    <div style={{ textAlign: "right" }}>
+                                        <span style={{ color: "#92cc41", display: "block" }}>COMPLETED</span>
+                                        <span style={{ fontSize: "0.8rem", color: "yellow" }}>SCORE: {userData?.scores?.round3 || 0}</span>
+                                        {currentRoundId === 3 && <span style={{ display: "block", fontSize: "0.6rem", color: "#666" }}>WAITING FOR NEXT ROUND...</span>}
+                                    </div>
+                                ) : currentRoundId === 3 ? (
                                     <Link href="/round3"><button className="nes-btn is-success">CODE</button></Link>
                                 ) : currentRoundId > 3 ? (
-                                    <span style={{ color: "#92cc41" }}>COMPLETED</span>
+                                    <span style={{ color: "#92cc41" }}>SKIPPED/DONE</span>
                                 ) : <button className="nes-btn is-disabled">LOCKED</button>}
                             </div>
 
@@ -152,7 +170,12 @@ export default function UserDashboard() {
                                     {currentRoundId < 4 && <span>🔒</span>}
                                     <p style={{ margin: 0 }}>ROUND 4: WEB</p>
                                 </div>
-                                {currentRoundId === 4 ? (
+                                {userData?.completedRoundIds?.includes(4) ? (
+                                    <div style={{ textAlign: "right" }}>
+                                        <span style={{ color: "#92cc41", display: "block" }}>SUBMITTED</span>
+                                        {currentRoundId === 4 && <span style={{ display: "block", fontSize: "0.6rem", color: "#666" }}>WAITING FOR FINAL RESULTS...</span>}
+                                    </div>
+                                ) : currentRoundId === 4 ? (
                                     <Link href="/round4"><button className="nes-btn is-error">BUILD</button></Link>
                                 ) : currentRoundId > 4 ? (
                                     <span style={{ color: "#92cc41" }}>COMPLETED</span>

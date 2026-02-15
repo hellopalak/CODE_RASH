@@ -4,6 +4,9 @@ import { useState } from "react";
 import AntiCheatGuard from "@/components/AntiCheatGuard";
 import SafeLink from "@/components/SafeLink";
 import { useContest } from "@/context/ContestContext";
+import { useRouter } from "next/navigation";
+import { db } from "@/lib/firebase";
+import { doc, setDoc, arrayUnion } from "firebase/firestore";
 
 export default function Round2Page() {
     const { currentTimeout, unlockNextRound } = useContest();
@@ -21,8 +24,39 @@ export default function Round2Page() {
     // Calculate sprint time remaining
     const sprintTime = isSprint1 ? currentTimeout - 900 : currentTimeout;
 
+    const [submissionLink, setSubmissionLink] = useState("");
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const router = useRouter();
+
+    const handleSubmit = async () => {
+        if (!submissionLink.includes("codeforces.com")) {
+            alert("Please provide a valid Codeforces link.");
+            return;
+        }
+
+        setIsSubmitting(true);
+        const myEmail = localStorage.getItem("contest_user_email");
+        if (myEmail) {
+            try {
+                const userRef = doc(db, "users", myEmail);
+                await setDoc(userRef, {
+                    submissions: { round2: submissionLink },
+                    completedRoundIds: arrayUnion(2)
+                }, { merge: true });
+
+                alert("Submission Received! Redirecting to Dashboard...");
+                unlockNextRound();
+                router.push("/dashboard");
+            } catch (e) {
+                console.error("Error submitting:", e);
+                alert("Error submitting. Try again.");
+                setIsSubmitting(false);
+            }
+        }
+    };
+
     return (
-        <AntiCheatGuard>
+        <AntiCheatGuard allowCopyPaste={true}>
             <div className="container" style={{ marginTop: "50px" }}>
                 <div className="nes-container is-rounded is-dark">
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "20px" }}>
@@ -50,7 +84,7 @@ export default function Round2Page() {
                                     <th>#</th>
                                     <th>Problem Name</th>
                                     <th>Difficulty</th>
-                                    <th>Action</th>
+                                    <th>Link</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -60,13 +94,38 @@ export default function Round2Page() {
                                     <td>{currentProblem.difficulty}</td>
                                     <td>
                                         <SafeLink href={currentProblem.link} className="">
-                                            <button className="nes-btn is-primary">SOLVE</button>
+                                            <button className="nes-btn is-primary">OPEN PROBLEM</button>
                                         </SafeLink>
                                     </td>
                                 </tr>
                             </tbody>
                         </table>
                     </div>
+
+                    {/* SUBMISSION AREA */}
+                    <div className="nes-container is-dark with-title" style={{ marginTop: "30px" }}>
+                        <p className="title">Submission</p>
+                        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                            <input
+                                type="text"
+                                className="nes-input is-dark"
+                                placeholder="Paste Codeforces Submission URL..."
+                                value={submissionLink}
+                                onChange={(e) => setSubmissionLink(e.target.value)}
+                            />
+                            <button
+                                className={`nes-btn ${isSubmitting ? "is-disabled" : "is-success"}`}
+                                onClick={handleSubmit}
+                                disabled={isSubmitting}
+                            >
+                                {isSubmitting ? "WAIT..." : "FINISH ROUND"}
+                            </button>
+                        </div>
+                        <p style={{ fontSize: "0.7rem", color: "#888", marginTop: "10px" }}>
+                            Paste the link to your accepted submission. Once you submit, you will be redirected to the dashboard.
+                        </p>
+                    </div>
+
                 </div>
             </div>
         </AntiCheatGuard>

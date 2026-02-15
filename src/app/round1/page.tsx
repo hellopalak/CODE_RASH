@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import AntiCheatGuard from "@/components/AntiCheatGuard";
 import { useContest } from "@/context/ContestContext";
 import { useRouter } from "next/navigation";
+import { db } from "@/lib/firebase";
+import { doc, setDoc, arrayUnion } from "firebase/firestore";
 
 // Rapid Fire Logic & CS Fundamentals
 const QUESTIONS = [
@@ -35,18 +37,39 @@ export default function Round1Page() {
     const { currentTimeout, unlockNextRound, currentRoundId } = useContest();
     const router = useRouter();
 
-    const handleNextQuestion = (selectedOptionIndex: number | null) => {
-        // Track Score
-        if (selectedOptionIndex === QUESTIONS[currentQuestion].answer) {
-            setScore(s => s + 5); // 5 points per question = 100 max
-        }
+    const handleNextQuestion = async (selectedOptionIndex: number | null) => {
+        // Calculate points for this question
+        const isCorrect = selectedOptionIndex === QUESTIONS[currentQuestion].answer;
+        const newScore = score + (isCorrect ? 5 : 0);
+
+        // Optimistically update state (though we might redirect before render)
+        if (isCorrect) setScore(newScore);
 
         if (currentQuestion < QUESTIONS.length - 1) {
             setCurrentQuestion(prev => prev + 1);
         } else {
             // Finished
-            alert(`Round 1 Complete! Score: ${score + (selectedOptionIndex === QUESTIONS[currentQuestion].answer ? 5 : 0)}/100`);
-            unlockNextRound();
+            const finalScore = newScore;
+
+            // Save to Firestore
+            const myEmail = localStorage.getItem("contest_user_email");
+            if (myEmail) {
+                try {
+                    const userRef = doc(db, "users", myEmail);
+                    await setDoc(userRef, {
+                        scores: { round1: finalScore },
+                        // Mark as completed for this round to show "Waiting" on dashboard
+                        completedRoundIds: arrayUnion(1) // Assuming we add this field logic
+                    }, { merge: true });
+                } catch (e) {
+                    console.error("Error saving score:", e);
+                    alert("Error saving score! Please screenshot this: " + finalScore);
+                }
+            }
+
+            alert(`Round 1 Complete! Score: ${finalScore}/100. Redirecting to Dashboard...`);
+            unlockNextRound(); // Updates local context
+            router.push("/dashboard");
         }
     };
 

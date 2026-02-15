@@ -3,11 +3,40 @@
 import { useState } from "react";
 import AntiCheatGuard from "@/components/AntiCheatGuard";
 import Editor from "@monaco-editor/react";
+import { useRouter } from "next/navigation";
+import { db } from "@/lib/firebase";
+import { doc, setDoc, arrayUnion } from "firebase/firestore";
 import { useContest } from "@/context/ContestContext";
 
 export default function Round4Page() {
     const { currentTimeout } = useContest();
     const [code, setCode] = useState("<h1>Hello World</h1>\n<style>\n  body { background: #333; color: white; }\n</style>");
+
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const router = useRouter();
+    const { unlockNextRound } = useContest();
+
+    const handleSubmit = async () => {
+        setIsSubmitting(true);
+        const myEmail = localStorage.getItem("contest_user_email");
+        if (myEmail) {
+            try {
+                const userRef = doc(db, "users", myEmail);
+                await setDoc(userRef, {
+                    submissions: { round4: code },
+                    completedRoundIds: arrayUnion(4)
+                }, { merge: true });
+
+                alert("Project Submitted! Redirecting to Dashboard...");
+                unlockNextRound();
+                router.push("/dashboard");
+            } catch (e) {
+                console.error("Error submitting:", e);
+                alert("Error submitting. Try again.");
+                setIsSubmitting(false);
+            }
+        }
+    };
 
     const handleEditorChange = (value: string | undefined) => {
         setCode(value || "");
@@ -41,7 +70,13 @@ export default function Round4Page() {
                         <button className="nes-btn is-primary is-small" onClick={() => setShowAssets(!showAssets)}>
                             {showAssets ? "CLOSE ASSETS" : "OPEN ASSETS"}
                         </button>
-                        <button className="nes-btn is-success is-small">SUBMIT</button>
+                        <button
+                            className={`nes-btn ${isSubmitting ? "is-disabled" : "is-success"} is-small`}
+                            onClick={handleSubmit}
+                            disabled={isSubmitting}
+                        >
+                            {isSubmitting ? "SAVING..." : "SUBMIT"}
+                        </button>
                     </div>
                 </div>
 

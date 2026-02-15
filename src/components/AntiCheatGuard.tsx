@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useRef, createContext, useContext } from "react";
 import { useRouter } from "next/navigation";
+import { db } from "@/lib/firebase";
+import { doc, setDoc, increment } from "firebase/firestore";
 
 interface AntiCheatContextType {
     setSafeMode: (active: boolean) => void;
@@ -176,23 +178,48 @@ export default function AntiCheatGuard({ children, onDisqualify, maxWarnings = 3
         };
     }, [allowCopyPaste]);
 
-    const incrementWarnings = (reason: string) => {
+    const incrementWarnings = async (reason: string) => {
+        let newCount = 0;
         setWarnings(prev => {
-            // Debounce slightly if needed, but for now strict
-            const newCount = prev + 1;
-            if (newCount > maxWarnings) {
-                // Eliminate immediately
-                handleElimination();
-            }
+            newCount = prev + 1;
             return newCount;
         });
-        // Optional: Toast notification for reason
+
+        // Sync to Firestore
+        const myEmail = localStorage.getItem("contest_user_email");
+        if (myEmail) {
+            try {
+                const userRef = doc(db, "users", myEmail);
+                await setDoc(userRef, {
+                    warnings: increment(1)
+                }, { merge: true });
+            } catch (e) {
+                console.error("Failed to sync warning:", e);
+            }
+        }
+
         console.warn(`Warning: ${reason}`);
+
+        if (newCount > maxWarnings) {
+            handleElimination();
+        }
     };
 
-    const handleElimination = () => {
+    const handleElimination = async () => {
         setIsEliminated(true);
         if (onDisqualify) onDisqualify();
+
+        const myEmail = localStorage.getItem("contest_user_email");
+        if (myEmail) {
+            try {
+                const userRef = doc(db, "users", myEmail);
+                await setDoc(userRef, {
+                    status: "Disqualified"
+                }, { merge: true });
+            } catch (e) {
+                console.error("Failed to sync disqualification:", e);
+            }
+        }
     };
 
     if (isEliminated) {

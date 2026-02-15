@@ -4,6 +4,8 @@ import { useState } from "react";
 import AntiCheatGuard from "@/components/AntiCheatGuard";
 import { useRouter } from "next/navigation";
 import { useContest } from "@/context/ContestContext";
+import { db } from "@/lib/firebase";
+import { doc, setDoc, arrayUnion } from "firebase/firestore";
 
 // Advanced Tech Quiz: AI, Cloud, Cybersec, History, Hardware
 const TECH_QUESTIONS = [
@@ -35,18 +37,37 @@ export default function Round3Page() {
     const router = useRouter();
     const { currentTimeout, unlockNextRound, currentRoundId } = useContest();
 
-    const handleNextQuestion = (selectedOptionIndex: number | null) => {
-        // Track Score
-        if (selectedOptionIndex === TECH_QUESTIONS[currentQuestion].answer) {
-            setScore(s => s + 5);
-        }
+    const handleNextQuestion = async (selectedOptionIndex: number | null) => {
+        // Calculate points
+        const isCorrect = selectedOptionIndex === TECH_QUESTIONS[currentQuestion].answer;
+        const newScore = score + (isCorrect ? 5 : 0);
+
+        if (isCorrect) setScore(newScore);
 
         if (currentQuestion < TECH_QUESTIONS.length - 1) {
             setCurrentQuestion(prev => prev + 1);
         } else {
             // Finished
-            alert(`Round 3 Complete! Score: ${score + (selectedOptionIndex === TECH_QUESTIONS[currentQuestion].answer ? 5 : 0)}/100`);
+            const finalScore = newScore;
+
+            // Save to Firestore
+            const myEmail = localStorage.getItem("contest_user_email");
+            if (myEmail) {
+                try {
+                    const userRef = doc(db, "users", myEmail);
+                    await setDoc(userRef, {
+                        scores: { round3: finalScore },
+                        completedRoundIds: arrayUnion(3)
+                    }, { merge: true });
+                } catch (e) {
+                    console.error("Error saving score:", e);
+                    alert("Error saving score! Please screenshot this: " + finalScore);
+                }
+            }
+
+            alert(`Round 3 Complete! Score: ${finalScore}/100. Redirecting to Dashboard...`);
             unlockNextRound();
+            router.push("/dashboard");
         }
     };
 

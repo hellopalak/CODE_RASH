@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import AntiCheatGuard from "@/components/AntiCheatGuard";
+import SafeLink from "@/components/SafeLink";
+import { useContest } from "@/context/ContestContext";
 
 export default function Round2Page() {
-    const [timer, setTimer] = useState(1800); // 30 mins total
+    const { currentTimeout, unlockNextRound } = useContest();
 
     // In real app, these would be fetched from Firebase/Codeforces API
     const problems = [
@@ -12,20 +14,33 @@ export default function Round2Page() {
         { id: "2", title: "Way Too Long Words", difficulty: "800", link: "https://codeforces.com/problemset/problem/71/A" }
     ];
 
+    // Sprint Logic: Total 30m (1800s). First 15m (1800-900) = Prob 1. Last 15m (900-0) = Prob 2.
+    const isSprint1 = currentTimeout > 900;
+    const currentProblem = isSprint1 ? problems[0] : problems[1];
+
+    // Calculate sprint time remaining
+    const sprintTime = isSprint1 ? currentTimeout - 900 : currentTimeout;
+
     return (
         <AntiCheatGuard>
             <div className="container" style={{ marginTop: "50px" }}>
                 <div className="nes-container is-rounded is-dark">
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "20px" }}>
-                        <h2>Round 2: Data Structures & Algorithms</h2>
-                        <span style={{ color: "cyan" }}>Time Remaining: {Math.floor(timer / 60)}m {timer % 60}s</span>
+                        <h2>Round 2: DSA Sprints</h2>
+                        <div style={{ textAlign: "right" }}>
+                            <span style={{ color: "cyan", display: "block" }}>
+                                Total Time: {Math.floor(currentTimeout / 60)}:{(currentTimeout % 60).toString().padStart(2, '0')}
+                            </span>
+                            <span style={{ color: "yellow", fontSize: "0.8rem" }}>
+                                Sprint {isSprint1 ? "1" : "2"} Ends In: {Math.floor(sprintTime / 60)}:{(sprintTime % 60).toString().padStart(2, '0')}
+                            </span>
+                        </div>
                     </div>
 
                     <p style={{ marginBottom: "20px" }}>
-                        Solve the following problems on Codeforces.
+                        Solve the current sprint problem on Codeforces.
                         <br />
-                        WARNING: Leaving this tab may trigger anti-cheat warnings, but you must navigate to the problem.
-                        (Ideally, open in a new constrained window or use the built-in browser if available).
+                        WARNING: Sprint {isSprint1 ? "1" : "2"} is active.
                     </p>
 
                     <div className="nes-table-responsive">
@@ -39,18 +54,16 @@ export default function Round2Page() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {problems.map((prob, idx) => (
-                                    <tr key={prob.id}>
-                                        <td>{idx + 1}</td>
-                                        <td>{prob.title}</td>
-                                        <td>{prob.difficulty}</td>
-                                        <td>
-                                            <a href={prob.link} target="_blank" rel="noopener noreferrer">
-                                                <button className="nes-btn is-primary">SOLVE</button>
-                                            </a>
-                                        </td>
-                                    </tr>
-                                ))}
+                                <tr>
+                                    <td>{isSprint1 ? "1" : "2"}</td>
+                                    <td>{currentProblem.title}</td>
+                                    <td>{currentProblem.difficulty}</td>
+                                    <td>
+                                        <SafeLink href={currentProblem.link} className="">
+                                            <button className="nes-btn is-primary">SOLVE</button>
+                                        </SafeLink>
+                                    </td>
+                                </tr>
                             </tbody>
                         </table>
                     </div>

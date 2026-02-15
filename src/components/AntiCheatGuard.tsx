@@ -1,91 +1,237 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, createContext, useContext } from "react";
 import { useRouter } from "next/navigation";
+
+interface AntiCheatContextType {
+    setSafeMode: (active: boolean) => void;
+}
+
+const AntiCheatContext = createContext<AntiCheatContextType | null>(null);
+
+export const useAntiCheat = () => {
+    const context = useContext(AntiCheatContext);
+    if (!context) throw new Error("useAntiCheat must be used within AntiCheatGuard");
+    return context;
+};
 
 interface AntiCheatGuardProps {
     children: React.ReactNode;
     onDisqualify?: () => void;
-    contestId?: string;
     maxWarnings?: number;
+    allowCopyPaste?: boolean;
 }
 
-export default function AntiCheatGuard({ children, onDisqualify, maxWarnings = 3 }: AntiCheatGuardProps) {
+export default function AntiCheatGuard({ children, onDisqualify, maxWarnings = 3, allowCopyPaste = false }: AntiCheatGuardProps) {
     const [warnings, setWarnings] = useState(0);
     const [isEliminated, setIsEliminated] = useState(false);
+    const [isFullScreen, setIsFullScreen] = useState(false);
+    const [isBlurred, setIsBlurred] = useState(false);
     const router = useRouter();
+    const contentRef = useRef<HTMLDivElement>(null);
+    const safeModeRef = useRef(false);
+    const setSafeMode = (active: boolean) => {
+        safeModeRef.current = active;
+        console.log("Safe Mode set to:", active);
+    };
+
+    // Enter Full Screen Helper
+    const enterFullScreen = async () => {
+        const elem = document.documentElement;
+        if (elem.requestFullscreen) {
+            try {
+                await elem.requestFullscreen();
+                // Experimental: Try to lock system keys (Chrome/Edge only)
+                // @ts-ignore
+                if (navigator.keyboard && navigator.keyboard.lock) {
+                    // @ts-ignore
+                    await navigator.keyboard.lock(["AltLeft", "AltRight", "Tab", "Escape"]);
+                    console.log("Keyboard locked");
+                }
+            } catch (err) {
+                console.log("Full Screen / Keyboard Lock Error:", err);
+            }
+        }
+    };
 
     useEffect(() => {
         // 1. Prevent Copy/Paste/Right Click
-        const handlePrevent = (e: Event) => {
-            e.preventDefault();
-            // Optional: Add warning? Usually just blocking is enough for actions.
-            // But user asked "if user changes tabs... elimininated".
-            // "no chance of screenshot, no copy paste".
-        };
+        const handlePrevent = (e: Event) => e.preventDefault();
 
-        // 2. Tab Switching (Visibility Change)
+        // 2. Visibility Change (Tab Switching) & Blur (Alt+Tab)
         const handleVisibilityChange = () => {
             if (document.hidden) {
-                setWarnings((prev) => {
-                    const newCount = prev + 1;
-                    if (newCount > maxWarnings) {
-                        handleElimination();
-                    }
-                    return newCount;
-                });
+                if (safeModeRef.current) return;
+                incrementWarnings("Tab switching is prohibited!");
             }
         };
 
-        // 3. Prevent Screenshots (Best effort: monitoring PrintScreen key, blur)
-        // Note: OS level screenshots cannot be fully blocked by JS.
+        const handleBlur = () => {
+            if (safeModeRef.current) return;
+            setIsBlurred(true); // Content hidden immediately
+            // Only warn if it's not a momentary blur (like clicking an alert)
+            // But strict mode usually warns on any blur.
+            incrementWarnings("Focus lost! Do not switch windows.");
+        };
+
+        const handleFocus = () => {
+            setIsBlurred(false);
+        };
+
+        // 3. Full Screen Change Detection
+        const handleFullScreenChange = () => {
+            if (!document.fullscreenElement) {
+                setIsFullScreen(false);
+                incrementWarnings("Exiting Full Screen is prohibited!");
+            } else {
+                setIsFullScreen(true);
+            }
+        };
+
+        // 4. Keyboard Blocking (Screenshots, DevTools, Close)
         const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === "PrintScreen" || (e.ctrlKey && e.key === "p")) {
+            // Block DevTools: F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+Shift+C
+            if (
+                e.key === "F12" ||
+                (e.ctrlKey && e.shiftKey && ["I", "J", "C"].includes(e.key.toUpperCase()))
+            ) {
                 e.preventDefault();
+                alert("DevTools are disabled.");
+                return;
+            }
+
+            // Block Print: Ctrl+P
+            if (e.ctrlKey && e.key.toUpperCase() === "P") {
+                e.preventDefault();
+                alert("Printing is disabled.");
+                return;
+            }
+
+            // Block Save: Ctrl+S
+            if (e.ctrlKey && e.key.toUpperCase() === "S") {
+                e.preventDefault();
+                alert("Saving is disabled.");
+                return;
+            }
+
+            // Block Close: Ctrl+W (Best Effort)
+            // Note: Most browsers usually reserve this, but we can try + use beforeunload
+            if (e.ctrlKey && e.key.toUpperCase() === "W") {
+                e.preventDefault();
+                e.stopPropagation();
+                // We can't alert here reliably, but preventing default might stop it in some contexts (like PWAs)
+                return;
+            }
+
+            // Detect PrintScreen
+            if (e.key === "PrintScreen") {
+                e.preventDefault();
+                // Clear clipboard if possible
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText("");
+                }
                 alert("Screenshots are prohibited!");
-                // Increment warning?
-                setWarnings(prev => prev + 1);
+                incrementWarnings("Screenshot attempt detected.");
             }
         };
 
-        document.addEventListener("contextmenu", handlePrevent);
-        document.addEventListener("copy", handlePrevent);
-        document.addEventListener("paste", handlePrevent);
-        document.addEventListener("cut", handlePrevent);
+        // 5. Prevent Tab Close (beforeunload)
+        // Shows "Leave site?" dialog. Custom message is often ignored by modern browsers.
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            e.preventDefault();
+            e.returnValue = "Are you sure you want to leave? This will end your session.";
+            return "Are you sure you want to leave? This will end your session.";
+        };
+
+        // Attach Listeners
+        if (!allowCopyPaste) {
+            document.addEventListener("contextmenu", handlePrevent);
+            document.addEventListener("copy", handlePrevent);
+            document.addEventListener("paste", handlePrevent);
+            document.addEventListener("cut", handlePrevent);
+        }
         document.addEventListener("visibilitychange", handleVisibilityChange);
+        window.addEventListener("blur", handleBlur);
+        window.addEventListener("focus", handleFocus);
+        document.addEventListener("fullscreenchange", handleFullScreenChange);
         document.addEventListener("keydown", handleKeyDown);
+        window.addEventListener("beforeunload", handleBeforeUnload);
+
+        // Initial Full Screen Check
+        if (document.fullscreenElement) setIsFullScreen(true);
 
         return () => {
-            document.removeEventListener("contextmenu", handlePrevent);
-            document.removeEventListener("copy", handlePrevent);
-            document.removeEventListener("paste", handlePrevent);
-            document.removeEventListener("cut", handlePrevent);
+            if (!allowCopyPaste) {
+                document.removeEventListener("contextmenu", handlePrevent);
+                document.removeEventListener("copy", handlePrevent);
+                document.removeEventListener("paste", handlePrevent);
+                document.removeEventListener("cut", handlePrevent);
+            }
             document.removeEventListener("visibilitychange", handleVisibilityChange);
+            window.removeEventListener("blur", handleBlur);
+            window.removeEventListener("focus", handleFocus);
+            document.removeEventListener("fullscreenchange", handleFullScreenChange);
             document.removeEventListener("keydown", handleKeyDown);
+            window.removeEventListener("beforeunload", handleBeforeUnload);
         };
-    }, [maxWarnings]);
+    }, [allowCopyPaste]);
+
+    const incrementWarnings = (reason: string) => {
+        setWarnings(prev => {
+            // Debounce slightly if needed, but for now strict
+            const newCount = prev + 1;
+            if (newCount > maxWarnings) {
+                // Eliminate immediately
+                handleElimination();
+            }
+            return newCount;
+        });
+        // Optional: Toast notification for reason
+        console.warn(`Warning: ${reason}`);
+    };
 
     const handleElimination = () => {
         setIsEliminated(true);
         if (onDisqualify) onDisqualify();
-        // Here we would sync with Firebase to mark user as Disqualified
     };
 
     if (isEliminated) {
         return (
-            <div className="center-screen" style={{ backgroundColor: "#000", position: "fixed", top: 0, left: 0, width: "100%", height: "100%", zIndex: 9999 }}>
-                <div className="nes-container is-rounded is-dark" style={{ borderColor: "red", color: "red" }}>
+            <div className="center-screen" style={{
+                backgroundColor: "#000", position: "fixed", top: 0, left: 0,
+                width: "100%", height: "100%", zIndex: 99999, color: "red", textAlign: "center"
+            }}>
+                <div className="nes-container is-rounded is-dark" style={{ borderColor: "red" }}>
                     <h1>ELIMINATED</h1>
                     <p>You have violated the anti-cheating protocols.</p>
-                    <p>Tab switches detected: {warnings}</p>
+                    <p>Too many violations detected.</p>
                     <button className="nes-btn is-error" onClick={() => router.push("/")}>Return to Lobby</button>
                 </div>
             </div>
         );
     }
 
+    if (!isFullScreen) {
+        return (
+            <div className="center-screen" style={{
+                backgroundColor: "#000", position: "fixed", top: 0, left: 0,
+                width: "100%", height: "100%", zIndex: 9999, color: "#fff", textAlign: "center",
+                display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center"
+            }}>
+                <div className="nes-container is-rounded is-dark">
+                    <h2>Security Check</h2>
+                    <p>Full Screen Mode is required to continue.</p>
+                    <button className="nes-btn is-primary" onClick={enterFullScreen}>
+                        ENTER FULL SCREEN
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     return (
-        <>
+        <AntiCheatContext.Provider value={{ setSafeMode }}>
+            {/* Warning Overlay */}
             {warnings > 0 && (
                 <div style={{ position: "fixed", top: 10, right: 10, zIndex: 9999 }}>
                     <span className="nes-badge is-icon">
@@ -94,9 +240,21 @@ export default function AntiCheatGuard({ children, onDisqualify, maxWarnings = 3
                     </span>
                 </div>
             )}
-            <div className="no-select" style={{ userSelect: "none" }}>
+
+            {/* Blur Veil */}
+            {isBlurred && (
+                <div style={{
+                    position: "fixed", top: 0, left: 0, width: "100%", height: "100%",
+                    backgroundColor: "rgba(0,0,0,0.95)", zIndex: 9998,
+                    display: "flex", justifyContent: "center", alignItems: "center", color: "#fff"
+                }}>
+                    <h1>NO PEEKING!</h1>
+                </div>
+            )}
+
+            <div ref={contentRef} className="no-select" style={{ userSelect: "none", filter: isBlurred ? "blur(10px)" : "none" }}>
                 {children}
             </div>
-        </>
+        </AntiCheatContext.Provider>
     );
 }

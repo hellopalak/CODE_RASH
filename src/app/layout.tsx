@@ -6,6 +6,9 @@ export const metadata: Metadata = {
   description: "A Retro Coding Contest Platform",
 };
 
+import { ContestProvider } from "@/context/ContestContext";
+import StarBackground from "@/components/StarBackground";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -14,8 +17,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <div className="scanlines"></div>
-        {children}
+        <ContestProvider>
+          <StarBackground />
+          <div className="scanlines"></div>
+          {children}
+        </ContestProvider>
       </body>
     </html>
   );

@@ -117,15 +117,34 @@ export const ContestProvider = ({ children }: { children: React.ReactNode }) => 
         };
     }, []);
 
-    // --- 1.5 SEPARATE HEARTBEAT (Depends on Round) ---
+    // --- 1.5 SEPARATE HEARTBEAT & BAN CHECK (Depends on Round) ---
     useEffect(() => {
         const myEmail = localStorage.getItem("contest_user_email");
         if (!myEmail) return;
 
         const userDocRef = doc(db, "users", myEmail);
+        let isBanned = false; // Local flag to stop heartbeat writes
 
-        // Update Round Progress & Team Name
+        // A. Real-time Ban Listener
+        const unsubUser = onSnapshot(userDocRef, (docSnap) => {
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                if (data.status === "Kicked" || data.status === "Disqualified") {
+                    isBanned = true;
+                    console.warn("USER BANNED");
+                    alert("You have been kicked/disqualified by the admin.");
+                    localStorage.removeItem("contest_user_email");
+                    window.location.href = "/";
+                } else {
+                    isBanned = false;
+                }
+            }
+        });
+
+        // B. Heartbeat: Update Round Progress & Team Name
         const updateProgress = async () => {
+            if (isBanned) return; // Stop writing if banned
+
             try {
                 // Fetch Team Name from Allowlist if not known (Optimization: could cache in local)
                 let teamName = "Unknown";
@@ -152,7 +171,11 @@ export const ContestProvider = ({ children }: { children: React.ReactNode }) => 
 
         // Keep Alive Interval
         const interval = setInterval(() => updateProgress(), 30000);
-        return () => clearInterval(interval);
+
+        return () => {
+            clearInterval(interval);
+            unsubUser();
+        };
     }, [currentRoundId]);
 
     // --- 2. LOCAL TICKER (Derived from EndTime) ---

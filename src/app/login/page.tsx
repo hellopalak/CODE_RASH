@@ -4,7 +4,8 @@ import { Suspense, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { checkAccess } from "@/lib/allowlist";
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
+import { doc, getDoc } from "firebase/firestore";
 
 function LoginForm() {
     const searchParams = useSearchParams();
@@ -33,6 +34,19 @@ function LoginForm() {
             const allowed = await checkAccess(email, role, password);
 
             if (allowed) {
+                // 3. Check for Ban/Kick Status
+                if (role === "user") {
+                    const userRef = doc(db, "users", email);
+                    const userSnap = await getDoc(userRef);
+                    if (userSnap.exists()) {
+                        const data = userSnap.data();
+                        if (data.status === "Kicked" || data.status === "Disqualified") {
+                            setError("ACCOUNT BANNED: You have been kicked/disqualified from this contest.");
+                            return;
+                        }
+                    }
+                }
+
                 if (role === "admin") router.push("/admin");
                 else if (role === "evaluator") router.push("/evaluator");
                 else {

@@ -56,7 +56,7 @@ export default function Round2Page() {
     };
 
     return (
-        <AntiCheatGuard allowCopyPaste={true}>
+        <AntiCheatGuard allowCopyPaste={true} requireFullScreen={false}>
             <div className="container" style={{ marginTop: "50px" }}>
                 <div className="nes-container is-rounded is-dark">
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "20px" }}>

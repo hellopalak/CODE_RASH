@@ -22,9 +22,10 @@ interface AntiCheatGuardProps {
     onDisqualify?: () => void;
     maxWarnings?: number;
     allowCopyPaste?: boolean;
+    requireFullScreen?: boolean; // New Prop
 }
 
-export default function AntiCheatGuard({ children, onDisqualify, maxWarnings = 3, allowCopyPaste = false }: AntiCheatGuardProps) {
+export default function AntiCheatGuard({ children, onDisqualify, maxWarnings = 3, allowCopyPaste = false, requireFullScreen = true }: AntiCheatGuardProps) {
     const [warnings, setWarnings] = useState(0);
     const [isEliminated, setIsEliminated] = useState(false);
     const [isFullScreen, setIsFullScreen] = useState(false);
@@ -82,13 +83,15 @@ export default function AntiCheatGuard({ children, onDisqualify, maxWarnings = 3
 
         // 3. Full Screen Change Detection
         const handleFullScreenChange = () => {
-            if (!document.fullscreenElement) {
-                setIsFullScreen(false);
-                if (!safeModeRef.current) {
-                    incrementWarnings("Exiting Full Screen is prohibited!");
+            if (requireFullScreen) {
+                if (!document.fullscreenElement) {
+                    setIsFullScreen(false);
+                    if (!safeModeRef.current) {
+                        incrementWarnings("Exiting Full Screen is prohibited!");
+                    }
+                } else {
+                    setIsFullScreen(true);
                 }
-            } else {
-                setIsFullScreen(true);
             }
         };
 
@@ -162,7 +165,7 @@ export default function AntiCheatGuard({ children, onDisqualify, maxWarnings = 3
         window.addEventListener("beforeunload", handleBeforeUnload);
 
         // Initial Full Screen Check
-        if (document.fullscreenElement) setIsFullScreen(true);
+        if (requireFullScreen && document.fullscreenElement) setIsFullScreen(true);
 
         return () => {
             if (!allowCopyPaste) {
@@ -178,7 +181,9 @@ export default function AntiCheatGuard({ children, onDisqualify, maxWarnings = 3
             document.removeEventListener("keydown", handleKeyDown);
             window.removeEventListener("beforeunload", handleBeforeUnload);
         };
-    }, [allowCopyPaste]);
+    }, [allowCopyPaste, requireFullScreen]);
+
+    // ... [skip incrementWarnings and handleElimination] ...
 
     const incrementWarnings = async (reason: string) => {
         let newCount = 0;
@@ -240,7 +245,7 @@ export default function AntiCheatGuard({ children, onDisqualify, maxWarnings = 3
         );
     }
 
-    if (!isFullScreen) {
+    if (requireFullScreen && !isFullScreen) {
         return (
             <div className="center-screen" style={{
                 backgroundColor: "#000", position: "fixed", top: 0, left: 0,

@@ -79,16 +79,28 @@ export default function AdminDashboard() {
             const fetchedUsers: UserData[] = [];
             snapshot.forEach(doc => {
                 const data = doc.data();
+
+                // Calculate Total Score
+                let totalScore = 0;
+                if (data.score) totalScore = data.score; // Legacy numeric support
+                if (data.scores && typeof data.scores === 'object') {
+                    totalScore = Object.values(data.scores).reduce((acc: number, curr: any) => acc + (typeof curr === 'number' ? curr : 0), 0);
+                }
+
                 fetchedUsers.push({
                     id: doc.id,
                     name: data.name || "Unknown",
                     round: data.round || 0,
                     warnings: data.warnings || 0,
                     status: data.status || "Offline",
-                    score: data.score,
+                    score: totalScore,
                     team: data.team
                 } as UserData);
             });
+
+            // Sort by Score Descending
+            fetchedUsers.sort((a, b) => (b.score || 0) - (a.score || 0));
+
             setUsers(fetchedUsers);
             setLastUpdated(new Date().toLocaleTimeString());
         });
@@ -252,7 +264,8 @@ export default function AdminDashboard() {
                                             <th style={{ padding: "15px" }}>ID</th>
                                             <th style={{ padding: "15px" }}>Player</th>
                                             <th style={{ padding: "15px" }}>Team</th>
-                                            <th style={{ padding: "15px" }}>Progress</th>
+                                            <th style={{ padding: "15px" }}>Score</th>
+                                            <th style={{ padding: "15px" }}>Round</th>
                                             <th style={{ padding: "15px" }}>Warnings</th>
                                             <th style={{ padding: "15px" }}>Status</th>
                                             <th style={{ padding: "15px" }}>Actions</th>
@@ -264,7 +277,8 @@ export default function AdminDashboard() {
                                                 <td style={{ fontSize: "0.75rem", padding: "15px" }}>{(user.id || "").substring(0, 8)}...</td>
                                                 <td style={{ fontWeight: "bold", padding: "15px" }}>{user.name}</td>
                                                 <td style={{ color: "#F7D51D", padding: "15px" }}>{user.team || "-"}</td>
-                                                <td style={{ padding: "15px" }}>Round {user.round}</td>
+                                                <td style={{ color: "#00C853", padding: "15px", fontWeight: "bold" }}>{user.score || 0}</td>
+                                                <td style={{ padding: "15px" }}>{user.round}</td>
                                                 <td style={{ padding: "15px" }}>
                                                     {user.warnings || 0}/3
                                                 </td>

@@ -10,9 +10,9 @@ import { ROUND1_QUESTIONS } from "@/lib/questions";
 
 export default function Round1Page() {
     // State
-    const [questions, setQuestions] = useState(ROUND1_QUESTIONS);
+    const [questions, setQuestions] = useState<any[]>([]);
     const [currentQuestion, setCurrentQuestion] = useState(0);
-    const [score, setScore] = useState(0);
+    const [answers, setAnswers] = useState<Record<number, number>>({});
     const { currentTimeout, unlockNextRound, currentRoundId } = useContest();
     const router = useRouter();
 
@@ -20,66 +20,89 @@ export default function Round1Page() {
     useEffect(() => {
         const fetchQs = async () => {
             try {
+                let loadedQuestions = ROUND1_QUESTIONS;
                 const docSnap = await getDoc(doc(db, "contest_data", "round1"));
                 if (docSnap.exists()) {
                     const data = docSnap.data();
                     if (data.questions && Array.isArray(data.questions) && data.questions.length > 0) {
-                        setQuestions(data.questions);
+                        loadedQuestions = data.questions;
                     }
                 }
+                // Limit to 10 questions
+                setQuestions(loadedQuestions.slice(0, 10));
             } catch (e) {
                 console.error("Failed to load custom questions, using default.", e);
+                setQuestions(ROUND1_QUESTIONS.slice(0, 10));
             }
         };
         fetchQs();
     }, []);
 
-    const handleNextQuestion = async (selectedOptionIndex: number | null) => {
-        // Calculate points for this question
-        const isCorrect = selectedOptionIndex === questions[currentQuestion].answer;
-        const newScore = score + (isCorrect ? 5 : 0);
+    const handleOptionSelect = (optionIndex: number) => {
+        setAnswers(prev => ({
+            ...prev,
+            [currentQuestion]: optionIndex
+        }));
+    };
 
-        // Optimistically update state (though we might redirect before render)
-        if (isCorrect) setScore(newScore);
-
+    const handleNext = () => {
         if (currentQuestion < questions.length - 1) {
             setCurrentQuestion(prev => prev + 1);
-        } else {
-            // Finished
-            const finalScore = newScore;
-
-            // Save to Firestore
-            const myEmail = localStorage.getItem("contest_user_email");
-            if (myEmail) {
-                try {
-                    const userRef = doc(db, "users", myEmail);
-                    await setDoc(userRef, {
-                        scores: { round1: finalScore },
-                        // Mark as completed for this round to show "Waiting" on dashboard
-                        completedRoundIds: arrayUnion(1) // Assuming we add this field logic
-                    }, { merge: true });
-                } catch (e) {
-                    console.error("Error saving score:", e);
-                    alert("Error saving score! Please screenshot this: " + finalScore);
-                }
-            }
-
-            alert(`Round 1 Complete! Score: ${finalScore}/100. Redirecting to Dashboard...`);
-            unlockNextRound(); // Updates local context
-            router.push("/dashboard");
         }
     };
 
+    const handlePrev = () => {
+        if (currentQuestion > 0) {
+            setCurrentQuestion(prev => prev - 1);
+        }
+    };
+
+    const handleSubmit = async () => {
+        if (!confirm("Are you sure you want to submit your answers? This cannot be undone.")) return;
+
+        // Calculate Score
+        let finalScore = 0;
+        questions.forEach((q, idx) => {
+            if (answers[idx] === q.answer) {
+                finalScore += 5; // +5 per correct answer (assuming 10 questions = 50 max? Or scale to 100?)
+                // User didn't specify scoring, assuming existing logic (+5).
+                // If 10 questions, max is 50.
+            }
+        });
+
+        // Normalize to 100? Or keep raw? Previous code was +5.
+        // Let's keep +5. 10 * 5 = 50.
+
+        // Save to Firestore
+        const myEmail = localStorage.getItem("contest_user_email");
+        if (myEmail) {
+            try {
+                const userRef = doc(db, "users", myEmail);
+                await setDoc(userRef, {
+                    scores: { round1: finalScore },
+                    completedRoundIds: arrayUnion(1)
+                }, { merge: true });
+            } catch (e) {
+                console.error("Error saving score:", e);
+                alert("Error saving score! Please screenshot this: " + finalScore);
+            }
+        }
+
+        alert(`Round 1 Complete! Score: ${finalScore}. Redirecting to Dashboard...`);
+        unlockNextRound();
+        router.push("/dashboard");
+    };
+
     const handleDisqualify = () => {
-        // Handled by AntiCheatGuard internally mostly, but we can log
         console.log("Disqualified");
     };
 
+    // Loading State
+    if (questions.length === 0) return <div className="nes-container is-dark">Loading Questions...</div>;
+
     const question = questions[currentQuestion];
 
-    // Auto-skip if time runs out is handled by ContestContext, but we can visually show urgency
     if (currentRoundId !== 1) {
-        // If context says we moved on, the page should redirect (Context handles this, but safety check)
         return <div className="nes-container is-dark"><p>Round ends...</p></div>;
     }
 
@@ -105,7 +128,7 @@ export default function Round1Page() {
                 {/* Progress Bar */}
                 <div style={{ marginBottom: "20px", height: "10px", background: "#333", border: "2px solid #fff" }}>
                     <div style={{
-                        width: `${((currentQuestion) / questions.length) * 100}%`,
+                        width: `${((currentQuestion + 1) / questions.length) * 100}%`,
                         height: "100%",
                         background: "#00C853",
                         transition: "width 0.3s ease"
@@ -118,20 +141,63 @@ export default function Round1Page() {
 
                     <div style={{ marginBottom: "30px", fontSize: "1.2rem", lineHeight: "1.5" }}>
                         {question.text}
+                        {question.code && (
+                            <pre style={{ textAlign: "left", marginTop: "15px", padding: "10px", background: "#000", fontSize: "0.8rem" }}>
+                                <code>{question.code}</code>
+                            </pre>
+                        )}
                     </div>
 
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
-                        {question.options.map((opt, idx) => (
-                            <button
-                                key={idx}
-                                className="nes-btn"
-                                onClick={() => handleNextQuestion(idx)}
-                                style={{ minHeight: "60px" }}
-                            >
-                                {opt}
-                            </button>
-                        ))}
+                        {question.options.map((opt: string, idx: number) => {
+                            const isSelected = answers[currentQuestion] === idx;
+                            return (
+                                <button
+                                    key={idx}
+                                    className={`nes-btn ${isSelected ? "is-primary" : ""}`}
+                                    onClick={() => handleOptionSelect(idx)}
+                                    style={{ minHeight: "60px" }}
+                                >
+                                    {opt}
+                                </button>
+                            );
+                        })}
                     </div>
+                </div>
+
+                {/* Navigation Buttons */}
+                <div style={{ marginTop: "30px", display: "flex", justifyContent: "space-between" }}>
+                    <button
+                        className="nes-btn"
+                        disabled={currentQuestion === 0}
+                        onClick={handlePrev}
+                    >
+                        &lt; PREV
+                    </button>
+
+                    {currentQuestion === questions.length - 1 ? (
+                        <button className="nes-btn is-success" onClick={handleSubmit}>
+                            SUBMIT ROUND &gt;
+                        </button>
+                    ) : (
+                        <button className="nes-btn is-primary" onClick={handleNext}>
+                            NEXT &gt;
+                        </button>
+                    )}
+                </div>
+
+                {/* Question Palette (Optional, but good for navigation) */}
+                <div style={{ marginTop: "30px", display: "flex", gap: "5px", flexWrap: "wrap", justifyContent: "center" }}>
+                    {questions.map((_, idx) => (
+                        <button
+                            key={idx}
+                            className={`nes-btn is-small ${currentQuestion === idx ? "is-primary" : answers[idx] !== undefined ? "is-success" : ""}`}
+                            style={{ width: "30px", height: "30px", padding: "0", fontSize: "0.7rem" }}
+                            onClick={() => setCurrentQuestion(idx)}
+                        >
+                            {idx + 1}
+                        </button>
+                    ))}
                 </div>
 
                 {/* Footer Hint */}

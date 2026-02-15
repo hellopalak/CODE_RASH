@@ -112,7 +112,7 @@ export default function UserDashboard() {
                             <div className={`nes-container is-rounded ${currentRoundId >= 1 ? "is-dark" : "is-disabled"}`} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderColor: currentRoundId === 1 ? "#F7D51D" : "" }}>
                                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                                     {currentRoundId < 1 && <span>🔒</span>}
-                                    <p style={{ margin: 0 }}>ROUND 1: QUIZ</p>
+                                    <p style={{ margin: 0 }}>ROUND 1: LOGICAL REASONING</p>
                                 </div>
                                 {userData?.completedRoundIds?.includes(1) ? (
                                     <div style={{ textAlign: "right" }}>
@@ -149,7 +149,7 @@ export default function UserDashboard() {
                             <div className={`nes-container is-rounded ${currentRoundId >= 3 ? "is-dark" : "is-disabled"}`} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderColor: currentRoundId === 3 ? "#F7D51D" : "" }}>
                                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                                     {currentRoundId < 3 && <span>🔒</span>}
-                                    <p style={{ margin: 0 }}>ROUND 3: TECH</p>
+                                    <p style={{ margin: 0 }}>ROUND 3: TECH QUIZ</p>
                                 </div>
                                 {userData?.completedRoundIds?.includes(3) ? (
                                     <div style={{ textAlign: "right" }}>
@@ -168,7 +168,7 @@ export default function UserDashboard() {
                             <div className={`nes-container is-rounded ${currentRoundId >= 4 ? "is-dark" : "is-disabled"}`} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderColor: currentRoundId === 4 ? "#F7D51D" : "" }}>
                                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                                     {currentRoundId < 4 && <span>🔒</span>}
-                                    <p style={{ margin: 0 }}>ROUND 4: WEB</p>
+                                    <p style={{ margin: 0 }}>ROUND 4: WEB DEVELOPEMENT</p>
                                 </div>
                                 {userData?.completedRoundIds?.includes(4) ? (
                                     <div style={{ textAlign: "right" }}>

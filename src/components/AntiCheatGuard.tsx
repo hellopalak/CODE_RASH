@@ -84,7 +84,9 @@ export default function AntiCheatGuard({ children, onDisqualify, maxWarnings = 3
         const handleFullScreenChange = () => {
             if (!document.fullscreenElement) {
                 setIsFullScreen(false);
-                incrementWarnings("Exiting Full Screen is prohibited!");
+                if (!safeModeRef.current) {
+                    incrementWarnings("Exiting Full Screen is prohibited!");
+                }
             } else {
                 setIsFullScreen(true);
             }

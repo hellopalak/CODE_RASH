@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useContest } from "@/context/ContestContext";
 import { db } from "@/lib/firebase";
 import { collection, onSnapshot, doc, updateDoc, setDoc } from "firebase/firestore";
+import { ROUND1_QUESTIONS, ROUND3_QUESTIONS } from "@/lib/questions";
 
 interface UserData {
     id: string;
@@ -23,6 +24,52 @@ export default function AdminDashboard() {
     const [password, setPassword] = useState("");
 
     const [lastUpdated, setLastUpdated] = useState<string>("");
+    const [bulkEmails, setBulkEmails] = useState("");
+
+    // --- Bulk Upload Logic ---
+    const handleBulkAdd = async () => {
+        if (!bulkEmails.trim()) {
+            alert("Please paste some emails first.");
+            return;
+        }
+
+        const emails = bulkEmails.split(/[\n,]+/).map(e => e.trim()).filter(e => e);
+        if (emails.length === 0) return;
+
+        if (!confirm(`Add ${emails.length} users? This will generate passwords for them.`)) return;
+
+        const credentials: { email: string, pass: string }[] = [];
+
+        try {
+            for (const email of emails) {
+                const pass = Math.random().toString(36).slice(-8);
+                await setDoc(doc(db, "allowed_users", email), {
+                    role: "user",
+                    password: pass
+                });
+                credentials.push({ email, pass });
+            }
+
+            const csvContent = "data:text/csv;charset=utf-8,"
+                + "Email,Password\n"
+                + credentials.map(c => `${c.email},${c.pass}`).join("\n");
+
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "code_rash_credentials.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            alert(`Successfully added ${emails.length} users! Credentials downloaded.`);
+            setBulkEmails("");
+
+        } catch (e: any) {
+            console.error(e);
+            alert("Error adding users: " + e.message);
+        }
+    };
 
     // --- Real-Time User Sync ---
     useEffect(() => {
@@ -94,6 +141,8 @@ export default function AdminDashboard() {
     const handleForgive = async (id: string) => {
         await updateDoc(doc(db, "users", id), { warnings: 0, status: "Online" });
     };
+
+
 
     // --- Layout ---
     return (
@@ -356,6 +405,60 @@ export default function AdminDashboard() {
                                     }}
                                 >
                                     SEED DATABASE WITH PASSWORDS
+                                </button>
+                            </div>
+
+                            <div style={{ marginBottom: "30px" }}>
+                                <p style={{ color: "#F7D51D", marginBottom: "10px" }}>Sync Questions (Hardcoded &rarr; DB)</p>
+                                <p style={{ fontSize: "0.8rem", marginBottom: "20px" }}>
+                                    This will upload the default questions from the code to Firestore.
+                                    Useful if you want to edit them in the Firebase Console later.
+                                </p>
+                                <button
+                                    className="nes-btn is-warning"
+                                    onClick={async () => {
+                                        if (!confirm("Overwrite existing questions in DB?")) return;
+
+                                        try {
+                                            // Seed Round 1
+                                            await setDoc(doc(db, "contest_data", "round1"), {
+                                                questions: ROUND1_QUESTIONS
+                                            });
+
+                                            // Seed Round 3
+                                            await setDoc(doc(db, "contest_data", "round3"), {
+                                                questions: ROUND3_QUESTIONS
+                                            });
+
+                                            alert("Questions synced to Firestore (contest_data/round1 & round3)!");
+
+                                        } catch (e: any) {
+                                            alert("Error syncing questions: " + e.message);
+                                        }
+                                    }}
+                                >
+                                    UPLOAD DEFAULT QUESTIONS
+                                </button>
+                            </div>
+
+                            <div style={{ marginBottom: "30px" }}>
+                                <p style={{ color: "#F7D51D", marginBottom: "10px" }}>Bulk Add Users</p>
+                                <p style={{ fontSize: "0.8rem", marginBottom: "10px" }}>
+                                    Paste email addresses below (one per line).
+                                    A downloadable CSV with passwords will be generated.
+                                </p>
+                                <textarea
+                                    className="nes-textarea is-dark"
+                                    style={{ height: "150px", marginBottom: "10px" }}
+                                    placeholder="user1@example.com&#10;user2@example.com&#10;..."
+                                    value={bulkEmails}
+                                    onChange={(e) => setBulkEmails(e.target.value)}
+                                />
+                                <button
+                                    className="nes-btn is-success"
+                                    onClick={handleBulkAdd}
+                                >
+                                    PROCESS & ADD USERS
                                 </button>
                             </div>
 

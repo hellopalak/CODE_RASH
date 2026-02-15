@@ -1,50 +1,47 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import AntiCheatGuard from "@/components/AntiCheatGuard";
 import { useRouter } from "next/navigation";
 import { useContest } from "@/context/ContestContext";
 import { db } from "@/lib/firebase";
-import { doc, setDoc, arrayUnion } from "firebase/firestore";
-
-// Advanced Tech Quiz: AI, Cloud, Cybersec, History, Hardware
-const TECH_QUESTIONS = [
-    { id: 1, text: "Which AI model is developed by OpenAI?", options: ["Llama", "Gemini", "GPT-4", "Claude"], answer: 2 },
-    { id: 2, text: "What does AWS stand for?", options: ["Amazon Web Services", "Apple Web System", "Advanced Web Solutions", "Automated Web Server"], answer: 0 },
-    { id: 3, text: "Which protocol is use for secure browsing?", options: ["HTTP", "FTP", "SSH", "HTTPS"], answer: 3 },
-    { id: 4, text: "The 'brain' of the computer is:", options: ["RAM", "GPU", "CPU", "Motherboard"], answer: 2 },
-    { id: 5, text: "Who is considered the father of the computer?", options: ["Alan Turing", "Charles Babbage", "Steve Jobs", "Bill Gates"], answer: 1 },
-    { id: 6, text: "Which is a NoSQL database?", options: ["MySQL", "PostgreSQL", "MongoDB", "Oracle"], answer: 2 },
-    { id: 7, text: "What is the primary function of an OS?", options: ["Compile code", "Manage resources", "Design websites", "Protect from viruses"], answer: 1 },
-    { id: 8, text: "First computer programmer?", options: ["Ada Lovelace", "Grace Hopper", "Margaret Hamilton", "Katherine Johnson"], answer: 0 },
-    { id: 9, text: "What year was the World Wide Web invented?", options: ["1983", "1989", "1995", "2000"], answer: 1 },
-    { id: 10, text: "Which cloud provider belongs to Google?", options: ["Azure", "AWS", "DigitalOcean", "GCP"], answer: 3 },
-    { id: 11, text: "What does 'Phishing' refer to?", options: ["Fishing game", "Identity Theft Scam", "Network Testing", "Database Optimization"], answer: 1 },
-    { id: 12, text: "Which is a containerization tool?", options: ["Kubernetes", "Docker", "Ansible", "Jenkins"], answer: 1 },
-    { id: 13, text: "What is 'Blockchain' primarily known for?", options: ["Centralized Storage", "Decentralized Ledger", "Cloud Computing", "AI Processing"], answer: 1 },
-    { id: 14, text: "Which allows running multiple OS on one machine?", options: ["Virtualization", "Compilation", "Interpretation", "Segmentation"], answer: 0 },
-    { id: 15, text: "What port does HTTP commonly use?", options: ["21", "22", "80", "443"], answer: 2 },
-    { id: 16, text: "Who co-founded Microsoft?", options: ["Steve Wozniak", "Paul Allen", "Larry Page", "Elon Musk"], answer: 1 },
-    { id: 17, text: "Which is a statically typed language?", options: ["Python", "JavaScript", "Java", "Ruby"], answer: 2 },
-    { id: 18, text: "What does 'IoT' stand for?", options: ["Internet of Tokens", "Internet of Things", "Input of Technology", "Integrator of Tools"], answer: 1 },
-    { id: 19, text: "Which company owns GitHub?", options: ["Google", "Facebook", "Microsoft", "Amazon"], answer: 2 },
-    { id: 20, text: "What is the complexity of accessing an array index?", options: ["O(n)", "O(1)", "O(log n)", "O(n^2)"], answer: 1 },
-];
+import { doc, setDoc, arrayUnion, getDoc } from "firebase/firestore";
+import { ROUND3_QUESTIONS } from "@/lib/questions";
 
 export default function Round3Page() {
+    // State
+    const [questions, setQuestions] = useState(ROUND3_QUESTIONS);
     const [currentQuestion, setCurrentQuestion] = useState(0);
     const [score, setScore] = useState(0);
     const router = useRouter();
     const { currentTimeout, unlockNextRound, currentRoundId } = useContest();
 
+    // Fetch Questions from DB (optional override)
+    useEffect(() => {
+        const fetchQs = async () => {
+            try {
+                const docSnap = await getDoc(doc(db, "contest_data", "round3"));
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    if (data.questions && Array.isArray(data.questions) && data.questions.length > 0) {
+                        setQuestions(data.questions);
+                    }
+                }
+            } catch (e) {
+                console.error("Failed to load custom questions, using default.", e);
+            }
+        };
+        fetchQs();
+    }, []);
+
     const handleNextQuestion = async (selectedOptionIndex: number | null) => {
         // Calculate points
-        const isCorrect = selectedOptionIndex === TECH_QUESTIONS[currentQuestion].answer;
+        const isCorrect = selectedOptionIndex === questions[currentQuestion].answer;
         const newScore = score + (isCorrect ? 5 : 0);
 
         if (isCorrect) setScore(newScore);
 
-        if (currentQuestion < TECH_QUESTIONS.length - 1) {
+        if (currentQuestion < questions.length - 1) {
             setCurrentQuestion(prev => prev + 1);
         } else {
             // Finished
@@ -71,7 +68,7 @@ export default function Round3Page() {
         }
     };
 
-    const question = TECH_QUESTIONS[currentQuestion];
+    const question = questions[currentQuestion];
 
     if (currentRoundId !== 3) {
         return <div className="nes-container is-dark"><p>Round locked or passed.</p></div>;
@@ -93,14 +90,14 @@ export default function Round3Page() {
                         <span style={{ display: "block", color: currentTimeout < 60 ? "red" : "#fff" }}>
                             ⏱ {Math.floor(currentTimeout / 60)}:{(currentTimeout % 60).toString().padStart(2, '0')}
                         </span>
-                        <span style={{ fontSize: "0.8rem", color: "cyan" }}>Q: {currentQuestion + 1}/{TECH_QUESTIONS.length}</span>
+                        <span style={{ fontSize: "0.8rem", color: "cyan" }}>Q: {currentQuestion + 1}/{questions.length}</span>
                     </div>
                 </div>
 
                 {/* Progress Bar */}
                 <div style={{ marginBottom: "20px", height: "10px", background: "#333", border: "2px solid #fff" }}>
                     <div style={{
-                        width: `${((currentQuestion) / TECH_QUESTIONS.length) * 100}%`,
+                        width: `${((currentQuestion) / questions.length) * 100}%`,
                         height: "100%",
                         background: "#209cee",
                         transition: "width 0.3s ease"

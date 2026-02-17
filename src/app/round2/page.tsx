@@ -1,21 +1,29 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import AntiCheatGuard from "@/components/AntiCheatGuard";
 import SafeLink from "@/components/SafeLink";
 import { useContest } from "@/context/ContestContext";
 import { useRouter } from "next/navigation";
 import { db } from "@/lib/firebase";
-import { doc, setDoc, arrayUnion } from "firebase/firestore";
+import { doc, setDoc, arrayUnion, onSnapshot } from "firebase/firestore";
 
 export default function Round2Page() {
     const { currentTimeout, unlockNextRound } = useContest();
 
-    // In real app, these would be fetched from Firebase/Codeforces API
-    const problems = [
+    const [problems, setProblems] = useState<any[]>([
         { id: "1", title: "Watermelon", difficulty: "800", link: "https://codeforces.com/problemset/problem/4/A" },
         { id: "2", title: "Way Too Long Words", difficulty: "800", link: "https://codeforces.com/problemset/problem/71/A" }
-    ];
+    ]);
+
+    useEffect(() => {
+        const unsub = onSnapshot(doc(db, "contest_data", "round2"), (docSnap) => {
+            if (docSnap.exists() && docSnap.data().problems) {
+                setProblems(docSnap.data().problems);
+            }
+        });
+        return () => unsub();
+    }, []);
 
     // Sprint Logic: Total 30m (1800s). First 15m (1800-900) = Prob 1. Last 15m (900-0) = Prob 2.
     const isSprint1 = currentTimeout > 900;

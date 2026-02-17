@@ -64,7 +64,7 @@ export default function Round1Page() {
         let finalScore = 0;
         questions.forEach((q, idx) => {
             if (answers[idx] === q.answer) {
-                finalScore += 5; // +5 per correct answer (assuming 10 questions = 50 max? Or scale to 100?)
+                finalScore += 10; // +10 per correct answer
                 // User didn't specify scoring, assuming existing logic (+5).
                 // If 10 questions, max is 50.
             }

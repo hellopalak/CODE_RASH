@@ -63,7 +63,7 @@ export default function Round3Page() {
         let finalScore = 0;
         questions.forEach((q, idx) => {
             if (answers[idx] === q.answer) {
-                finalScore += 5; // +5 per correct answer
+                finalScore += 10; // +10 per correct answer
             }
         });
 

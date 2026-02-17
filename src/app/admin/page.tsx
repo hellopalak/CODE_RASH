@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useContest } from "@/context/ContestContext";
 import { db } from "@/lib/firebase";
-import { collection, onSnapshot, doc, updateDoc, setDoc } from "firebase/firestore";
+import { collection, onSnapshot, doc, updateDoc, setDoc, getDoc } from "firebase/firestore";
 import { ROUND1_QUESTIONS, ROUND3_QUESTIONS } from "@/lib/questions";
 
 interface UserData {
@@ -18,7 +18,140 @@ interface UserData {
 
 export default function AdminDashboard() {
     const { currentRoundId, currentTimeout, adminSetRound, adminSetTimer, adminResetContest } = useContest();
-    const [activeTab, setActiveTab] = useState<"dashboard" | "users" | "game" | "settings">("dashboard");
+    const [activeTab, setActiveTab] = useState<"dashboard" | "users" | "game" | "settings" | "questions">("dashboard");
+    const [questionTab, setQuestionTab] = useState<"r1" | "r2" | "r3">("r1");
+    // Questions State
+    const [r1Questions, setR1Questions] = useState<any[]>([]);
+    const [r3Questions, setR3Questions] = useState<any[]>([]);
+    const [r2Problems, setR2Problems] = useState<any[]>([
+        { id: "1", title: "Watermelon", difficulty: "800", link: "" },
+        { id: "2", title: "Way Too Long Words", difficulty: "800", link: "" }
+    ]);
+
+    // Form States
+    const [newQText, setNewQText] = useState("");
+    const [newQOptions, setNewQOptions] = useState(["", "", "", ""]);
+    const [newQAns, setNewQAns] = useState(0);
+    const [newQCode, setNewQCode] = useState(""); // Optional code snippet
+    const [bulkJson, setBulkJson] = useState("");
+
+    // Permission Error Helper
+    const [permissionError, setPermissionError] = useState(false);
+
+    const fetchQuestions = async () => {
+        try {
+            const r1Snap = await getDoc(doc(db, "contest_data", "round1"));
+            if (r1Snap.exists()) setR1Questions(r1Snap.data().questions || []);
+            else setR1Questions(ROUND1_QUESTIONS);
+
+            const r3Snap = await getDoc(doc(db, "contest_data", "round3"));
+            if (r3Snap.exists()) setR3Questions(r3Snap.data().questions || []);
+            else setR3Questions(ROUND3_QUESTIONS);
+
+            const r2Snap = await getDoc(doc(db, "contest_data", "round2"));
+            if (r2Snap.exists() && r2Snap.data().problems) setR2Problems(r2Snap.data().problems);
+        } catch (e: any) {
+            console.error(e);
+            if (e.code === "permission-denied") {
+                setPermissionError(true);
+            }
+        }
+    };
+
+    useEffect(() => {
+        if (activeTab === "questions") fetchQuestions();
+    }, [activeTab]);
+
+    const handleAddQuestion = async (round: "r1" | "r3") => {
+        const qData = {
+            id: Date.now(),
+            text: newQText,
+            options: newQOptions,
+            answer: newQAns,
+            code: newQCode
+        };
+
+        const collectionName = round === "r1" ? "round1" : "round3";
+        const currentList = round === "r1" ? r1Questions : r3Questions;
+        const newList = [...currentList, qData];
+
+        await setDoc(doc(db, "contest_data", collectionName), { questions: newList });
+        if (round === "r1") setR1Questions(newList);
+        else setR3Questions(newList);
+
+        setNewQText("");
+        setNewQOptions(["", "", "", ""]);
+        setNewQAns(0);
+        setNewQCode("");
+        alert("Question Added!");
+        alert("Question Added!");
+    };
+
+    const handleBulkUpload = async (round: "r1" | "r3") => {
+        try {
+            let parsed: any[] = [];
+            try {
+                parsed = JSON.parse(bulkJson);
+            } catch (e) {
+                alert("Invalid JSON format. Please check your syntax.");
+                return;
+            }
+
+            if (!Array.isArray(parsed)) {
+                alert("JSON must be an array of objects.");
+                return;
+            }
+
+            // Basic validation
+            if (parsed.length > 0 && (!parsed[0].text || !parsed[0].options || parsed[0].answer === undefined)) {
+                alert("Invalid question format. Must match: { text, options: [], answer: 0 }");
+                return;
+            }
+
+            if (!confirm(`Overwrite existing questions with ${parsed.length} new questions?`)) return;
+
+            const collectionName = round === "r1" ? "round1" : "round3";
+            await setDoc(doc(db, "contest_data", collectionName), { questions: parsed });
+
+            if (round === "r1") setR1Questions(parsed);
+            else setR3Questions(parsed);
+
+            setBulkJson("");
+            alert("Bulk Upload Successful!");
+        } catch (e: any) {
+            console.error(e);
+            if (e.code === 'permission-denied') setPermissionError(true);
+            alert("Error uploading: " + e.message);
+        }
+    };
+
+    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, round: "r1" | "r3") => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const text = event.target?.result as string;
+            setBulkJson(text); // Load into text area for review
+        };
+        reader.readAsText(file);
+    };
+
+    const handleDeleteQuestion = async (round: "r1" | "r3", idx: number) => {
+        if (!confirm("Delete this question?")) return;
+        const collectionName = round === "r1" ? "round1" : "round3";
+        const currentList = round === "r1" ? r1Questions : r3Questions;
+        const newList = currentList.filter((_, i) => i !== idx);
+
+        await setDoc(doc(db, "contest_data", collectionName), { questions: newList });
+        if (round === "r1") setR1Questions(newList);
+        else setR3Questions(newList);
+    };
+
+    const handleSaveR2 = async () => {
+        await setDoc(doc(db, "contest_data", "round2"), { problems: r2Problems });
+        alert("Round 2 Problems Saved!");
+    };
     const [users, setUsers] = useState<UserData[]>([]);
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [password, setPassword] = useState("");
@@ -188,6 +321,13 @@ export default function AdminDashboard() {
                         style={{ width: "100%", marginBottom: "15px", textAlign: "left" }}
                     >
                         Game Control
+                    </button>
+                    <button
+                        className={`nes-btn ${activeTab === "questions" ? "is-primary" : ""}`}
+                        onClick={() => setActiveTab("questions")}
+                        style={{ width: "100%", marginBottom: "15px", textAlign: "left" }}
+                    >
+                        Questions Input
                     </button>
                     <button
                         className={`nes-btn ${activeTab === "settings" ? "is-primary" : ""}`}
@@ -369,6 +509,182 @@ export default function AdminDashboard() {
                                 </div>
                             </div>
 
+                        </div>
+                    )}
+
+                    {/* --- QUESTIONS VIEW --- */}
+                    {activeTab === "questions" && (
+                        <div>
+                            <div style={{ marginBottom: "20px" }}>
+                                <button className={`nes-btn ${questionTab === "r1" ? "is-primary" : ""}`} onClick={() => setQuestionTab("r1")} style={{ marginRight: "10px" }}>Logic (R1)</button>
+                                <button className={`nes-btn ${questionTab === "r2" ? "is-warning" : ""}`} onClick={() => setQuestionTab("r2")} style={{ marginRight: "10px" }}>DSA (R2)</button>
+                                <button className={`nes-btn ${questionTab === "r3" ? "is-success" : ""}`} onClick={() => setQuestionTab("r3")}>Tech Quiz (R3)</button>
+                            </div>
+
+                            {/* ROUND 1 & 3 EDITOR */}
+                            {(questionTab === "r1" || questionTab === "r3") && (
+                                <div className="nes-container is-dark with-title">
+                                    <p className="title">{questionTab === "r1" ? "Logical Reasoning" : "Tech Quiz"} Questions</p>
+
+                                    {/* PERMISSION WARNING */}
+                                    {permissionError && (
+                                        <div className="nes-container is-rounded is-error" style={{ marginBottom: "20px", color: "red" }}>
+                                            <p>⚠ PERMISSION ERROR: Firestore Rules are blocking writes.</p>
+                                            <ul style={{ fontSize: "0.8rem", marginLeft: "20px" }}>
+                                                <li>Go to Firebase Console &gt; Firestore &gt; Rules</li>
+                                                <li>Set rules to: <code>allow read, write: if true;</code> (for testing)</li>
+                                                <li>Or ensure you are authenticated if rules require it.</li>
+                                            </ul>
+                                        </div>
+                                    )}
+
+                                    {/* BULK UPLOAD */}
+                                    <div className="nes-container is-rounded is-dark" style={{ marginBottom: "30px", borderColor: "#209cee" }}>
+                                        <p style={{ color: "#209cee" }}>Bulk Upload (JSON)</p>
+                                        <p style={{ fontSize: "0.8rem", marginBottom: "10px" }}>
+                                            Paste a JSON array of questions or upload a <code>.json</code> file.
+                                            <br />Format: <code>[{`{ "text": "...", "options": ["..."], "answer": 0 }`}, ...]</code>
+                                        </p>
+
+                                        <textarea
+                                            className="nes-textarea is-dark"
+                                            value={bulkJson}
+                                            onChange={e => setBulkJson(e.target.value)}
+                                            placeholder={`[\n  {\n    "text": "Example Question?",\n    "options": ["A", "B", "C", "D"],\n    "answer": 0\n  }\n]`}
+                                            style={{ height: "150px", marginBottom: "10px", fontSize: "0.8rem", fontFamily: "monospace" }}
+                                        />
+
+                                        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                                            <label className="nes-btn is-primary">
+                                                <span>Load File</span>
+                                                <input type="file" accept=".json" onChange={e => handleFileUpload(e, questionTab)} style={{ display: "none" }} />
+                                            </label>
+                                            <button className="nes-btn is-success" onClick={() => handleBulkUpload(questionTab)}>PARSE & UPLOAD</button>
+                                        </div>
+                                    </div>
+
+                                    {/* ADD FORM */}
+                                    <div className="nes-container is-rounded is-dark" style={{ marginBottom: "30px", border: "2px dashed #555" }}>
+                                        <p>Add New Question</p>
+                                        <div className="nes-field" style={{ marginBottom: "10px" }}>
+                                            <label>Question Text</label>
+                                            <input type="text" className="nes-input" value={newQText} onChange={e => setNewQText(e.target.value)} />
+                                        </div>
+                                        <div className="nes-field" style={{ marginBottom: "10px" }}>
+                                            <label>Code Snippet (Optional)</label>
+                                            <textarea className="nes-textarea" value={newQCode} onChange={e => setNewQCode(e.target.value)} style={{ height: "60px" }}></textarea>
+                                        </div>
+                                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "10px" }}>
+                                            {newQOptions.map((opt, i) => (
+                                                <div key={i}>
+                                                    <input
+                                                        type="text"
+                                                        className="nes-input is-small"
+                                                        placeholder={`Option ${i + 1}`}
+                                                        value={opt}
+                                                        onChange={e => {
+                                                            const newOpts = [...newQOptions];
+                                                            newOpts[i] = e.target.value;
+                                                            setNewQOptions(newOpts);
+                                                        }}
+                                                    />
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <div style={{ marginBottom: "15px" }}>
+                                            <label>Correct Answer Index (0-3)</label>
+                                            <select className="nes-select" value={newQAns} onChange={e => setNewQAns(parseInt(e.target.value))}>
+                                                {newQOptions.map((_, i) => <option key={i} value={i}>Option {i + 1}</option>)}
+                                            </select>
+                                        </div>
+                                        <button className="nes-btn is-success" onClick={() => handleAddQuestion(questionTab)}>ADD QUESTION</button>
+                                    </div>
+
+                                    {/* LIST */}
+                                    <div className="nes-table-responsive">
+                                        <table className="nes-table is-bordered is-dark" style={{ width: "100%" }}>
+                                            <thead>
+                                                <tr>
+                                                    <th>#</th>
+                                                    <th>Question</th>
+                                                    <th>Action</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {(questionTab === "r1" ? r1Questions : r3Questions).map((q, idx) => (
+                                                    <tr key={idx}>
+                                                        <td>{idx + 1}</td>
+                                                        <td style={{ fontSize: "0.8rem" }}>{q.text.substring(0, 50)}...</td>
+                                                        <td>
+                                                            <button className="nes-btn is-error is-small" onClick={() => handleDeleteQuestion(questionTab, idx)}>DEL</button>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* ROUND 2 EDITOR */}
+                            {questionTab === "r2" && (
+                                <div className="nes-container is-dark with-title">
+                                    <p className="title">DSA Sprint Problems</p>
+                                    <p style={{ marginBottom: "20px", fontSize: "0.8rem" }}>
+                                        Configure the 2 problems for the User Dashbaord side. Users will see a "OPEN PROBLEM" button which links to the URL provided below.
+                                    </p>
+
+                                    {[0, 1].map((idx) => (
+                                        <div key={idx} className="nes-container is-rounded is-dark" style={{ marginBottom: "20px" }}>
+                                            <p style={{ color: "yellow" }}>Sprint {idx + 1}</p>
+                                            <div className="nes-field" style={{ marginBottom: "10px" }}>
+                                                <label>Problem Title</label>
+                                                <input
+                                                    type="text"
+                                                    className="nes-input"
+                                                    value={r2Problems[idx]?.title || ""}
+                                                    onChange={e => {
+                                                        const newP = [...r2Problems];
+                                                        newP[idx] = { ...newP[idx], title: e.target.value };
+                                                        setR2Problems(newP);
+                                                    }}
+                                                />
+                                            </div>
+                                            <div style={{ display: "grid", gridTemplateColumns: "1fr 3fr", gap: "10px" }}>
+                                                <div className="nes-field">
+                                                    <label>Difficulty</label>
+                                                    <input
+                                                        type="text"
+                                                        className="nes-input"
+                                                        value={r2Problems[idx]?.difficulty || ""}
+                                                        onChange={e => {
+                                                            const newP = [...r2Problems];
+                                                            newP[idx] = { ...newP[idx], difficulty: e.target.value };
+                                                            setR2Problems(newP);
+                                                        }}
+                                                    />
+                                                </div>
+                                                <div className="nes-field">
+                                                    <label>Problem Link</label>
+                                                    <input
+                                                        type="text"
+                                                        className="nes-input"
+                                                        placeholder="https://codeforces.com/..."
+                                                        value={r2Problems[idx]?.link || ""}
+                                                        onChange={e => {
+                                                            const newP = [...r2Problems];
+                                                            newP[idx] = { ...newP[idx], link: e.target.value };
+                                                            setR2Problems(newP);
+                                                        }}
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+
+                                    <button className="nes-btn is-primary" onClick={handleSaveR2}>SAVE ROUND 2 CONFIG</button>
+                                </div>
+                            )}
                         </div>
                     )}
 

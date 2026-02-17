@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { useContest } from "@/context/ContestContext";
-import { db } from "@/lib/firebase";
 import { collection, onSnapshot, doc, updateDoc, setDoc, getDoc } from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { db, storage } from "@/lib/firebase";
 import { ROUND1_QUESTIONS, ROUND3_QUESTIONS } from "@/lib/questions";
 
 interface UserData {
@@ -33,6 +34,8 @@ export default function AdminDashboard() {
     const [newQOptions, setNewQOptions] = useState(["", "", "", ""]);
     const [newQAns, setNewQAns] = useState(0);
     const [newQCode, setNewQCode] = useState(""); // Optional code snippet
+    const [newQImage, setNewQImage] = useState<File | null>(null); // Optional image
+    const [isUploading, setIsUploading] = useState(false);
     const [bulkJson, setBulkJson] = useState("");
 
     // Permission Error Helper
@@ -63,28 +66,46 @@ export default function AdminDashboard() {
     }, [activeTab]);
 
     const handleAddQuestion = async (round: "r1" | "r3") => {
-        const qData = {
-            id: Date.now(),
-            text: newQText,
-            options: newQOptions,
-            answer: newQAns,
-            code: newQCode
-        };
+        setIsUploading(true);
+        let imageUrl = "";
 
-        const collectionName = round === "r1" ? "round1" : "round3";
-        const currentList = round === "r1" ? r1Questions : r3Questions;
-        const newList = [...currentList, qData];
+        try {
+            if (newQImage) {
+                const storageRef = ref(storage, `question_images/${Date.now()}_${newQImage.name}`);
+                await uploadBytes(storageRef, newQImage);
+                imageUrl = await getDownloadURL(storageRef);
+            }
 
-        await setDoc(doc(db, "contest_data", collectionName), { questions: newList });
-        if (round === "r1") setR1Questions(newList);
-        else setR3Questions(newList);
+            const qData = {
+                id: Date.now(),
+                text: newQText,
+                options: newQOptions,
+                answer: newQAns,
+                code: newQCode,
+                image: imageUrl
+            };
 
-        setNewQText("");
-        setNewQOptions(["", "", "", ""]);
-        setNewQAns(0);
-        setNewQCode("");
-        alert("Question Added!");
-        alert("Question Added!");
+            const collectionName = round === "r1" ? "round1" : "round3";
+            const currentList = round === "r1" ? r1Questions : r3Questions;
+            const newList = [...currentList, qData];
+
+            await setDoc(doc(db, "contest_data", collectionName), { questions: newList });
+            if (round === "r1") setR1Questions(newList);
+            else setR3Questions(newList);
+
+            setNewQText("");
+            setNewQOptions(["", "", "", ""]);
+            setNewQAns(0);
+            setNewQCode("");
+            setNewQImage(null);
+            setIsUploading(false);
+            alert("Question Added!");
+        } catch (e: any) {
+            console.error("Error adding question: ", e);
+            if (e.code === 'permission-denied') setPermissionError(true);
+            setIsUploading(false);
+            alert("Error adding question: " + e.message);
+        }
     };
 
     const handleBulkUpload = async (round: "r1" | "r3") => {
@@ -574,6 +595,10 @@ export default function AdminDashboard() {
                                             <label>Code Snippet (Optional)</label>
                                             <textarea className="nes-textarea" value={newQCode} onChange={e => setNewQCode(e.target.value)} style={{ height: "60px" }}></textarea>
                                         </div>
+                                        <div className="nes-field" style={{ marginBottom: "10px" }}>
+                                            <label>Image (Optional) {newQImage && <span className="is-success">- Selected: {newQImage.name}</span>}</label>
+                                            <input type="file" accept="image/*" onChange={e => setNewQImage(e.target.files?.[0] || null)} />
+                                        </div>
                                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "10px" }}>
                                             {newQOptions.map((opt, i) => (
                                                 <div key={i}>
@@ -597,7 +622,9 @@ export default function AdminDashboard() {
                                                 {newQOptions.map((_, i) => <option key={i} value={i}>Option {i + 1}</option>)}
                                             </select>
                                         </div>
-                                        <button className="nes-btn is-success" onClick={() => handleAddQuestion(questionTab)}>ADD QUESTION</button>
+                                        <button className={`nes-btn ${isUploading ? "is-disabled" : "is-success"}`} disabled={isUploading} onClick={() => handleAddQuestion(questionTab)}>
+                                            {isUploading ? "UPLOADING..." : "ADD QUESTION"}
+                                        </button>
                                     </div>
 
                                     {/* LIST */}

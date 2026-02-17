@@ -140,7 +140,16 @@ export default function Round1Page() {
                     <p className="title">Question {currentQuestion + 1}</p>
 
                     <div style={{ marginBottom: "30px", fontSize: "1.2rem", lineHeight: "1.5" }}>
-                        {question.text}
+                        {question.image && (
+                            <div style={{ marginBottom: "20px", textAlign: "center" }}>
+                                <img
+                                    src={question.image}
+                                    alt="Question Visual"
+                                    style={{ maxWidth: "100%", maxHeight: "400px", border: "4px solid #fff", borderRadius: "4px" }}
+                                />
+                            </div>
+                        )}
+                        <div style={{ marginBottom: "15px" }}>{question.text}</div>
                         {question.code && (
                             <pre style={{ textAlign: "left", marginTop: "15px", padding: "10px", background: "#000", fontSize: "0.8rem" }}>
                                 <code>{question.code}</code>

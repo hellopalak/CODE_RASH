@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# secrets
+service-account.json
+src/service-account.json
+scripts/service-account.json
+users.csv

@@ -16,6 +16,14 @@ export default function Round1Page() {
     const { currentTimeout, unlockNextRound, currentRoundId } = useContest();
     const router = useRouter();
 
+    // Redirect when Timeout = 0
+    useEffect(() => {
+        if (currentTimeout <= 0) {
+            alert("Time's up! Redirecting to dashboard...");
+            router.push("/dashboard");
+        }
+    }, [currentTimeout, router]);
+
     // Fetch Questions from DB (optional override)
     useEffect(() => {
         const fetchQs = async () => {

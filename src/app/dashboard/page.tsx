@@ -5,8 +5,9 @@ import Link from "next/link";
 import AntiCheatGuard from "@/components/AntiCheatGuard";
 import StarBackground from "@/components/StarBackground";
 import { useContest } from "@/context/ContestContext";
-import { db } from "@/lib/firebase";
-import { collection, query, where, getDocs, doc, getDoc, onSnapshot } from "firebase/firestore";
+import { db, auth } from "@/lib/firebase";
+import { collection, query, where, getDocs, doc, getDoc, onSnapshot, updateDoc } from "firebase/firestore";
+import { signOut } from "firebase/auth";
 
 export default function UserDashboard() {
     const { currentRoundId, currentTimeout } = useContest();
@@ -73,8 +74,27 @@ export default function UserDashboard() {
             <div className="container dashboard-layout" style={{ position: "relative", zIndex: 1, paddingTop: "2rem", paddingBottom: "2rem" }}>
 
                 {/* --- HEADER --- */}
-                <div className="nes-container with-title is-centered is-dark" style={{ marginBottom: "3rem" }}>
+                <div className="nes-container with-title is-centered is-dark" style={{ marginBottom: "3rem", position: "relative" }}>
                     <p className="title">PLAYER PROFILE</p>
+                    <button
+                        className="nes-btn is-error is-small"
+                        style={{ position: "absolute", top: "-20px", right: "10px" }}
+                        onClick={async () => {
+                            if (confirm("Are you sure you want to logout?")) {
+                                const myEmail = localStorage.getItem("contest_user_email");
+                                if (myEmail) {
+                                    try {
+                                        await updateDoc(doc(db, "users", myEmail), { status: "Offline" });
+                                    } catch (e) { console.error(e); }
+                                }
+                                localStorage.removeItem("contest_user_email");
+                                await signOut(auth);
+                                window.location.href = "/login";
+                            }
+                        }}
+                    >
+                        LOGOUT
+                    </button>
                     <div style={{ display: "flex", flexDirection: "column", gap: "1rem", alignItems: "center" }}>
                         <p style={{ fontSize: "1.2rem" }}>WELCOME, {userData?.name ? userData.name.toUpperCase() : "PLAYER"}!</p>
 

@@ -10,6 +10,15 @@ import { doc, setDoc, arrayUnion, onSnapshot } from "firebase/firestore";
 
 export default function Round2Page() {
     const { currentTimeout, unlockNextRound } = useContest();
+    const router = useRouter();
+
+    // Redirect when Timeout = 0
+    useEffect(() => {
+        if (currentTimeout <= 0) {
+            alert("Time's up! Redirecting to dashboard...");
+            router.push("/dashboard");
+        }
+    }, [currentTimeout, router]);
 
     const [problems, setProblems] = useState<any[]>([
         { id: "1", title: "Watermelon", difficulty: "800", link: "https://codeforces.com/problemset/problem/4/A" },
@@ -34,7 +43,7 @@ export default function Round2Page() {
 
     const [submissionLink, setSubmissionLink] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const router = useRouter();
+    // router declared above
 
     const handleSubmit = async () => {
         if (!submissionLink.includes("codeforces.com")) {

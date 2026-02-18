@@ -21,17 +21,11 @@ function LoginForm() {
 
         try {
             // 1. Authenticate with Firebase
-            // const userCredential = await signInWithEmailAndPassword(auth, email, password);
-            // const user = userCredential.user;
+            await signInWithEmailAndPassword(auth, email, password);
 
-            // For now, we are simulating the auth because we need the user to set up env vars first.
-            // But I will leave the structure ready for when they do.
-
-            // SIMULATION (Remove this when Env Vars are set)
-            // if (password !== "password") throw new Error("Wrong password (for simulation use 'password')");
-
-            // 2. Check Access Control (Role-based & Password)
-            const allowed = await checkAccess(email, role, password);
+            // 2. Check Access Control (Role-based Only)
+            // We pass email and role. Authenticated user implies password was correct.
+            const allowed = await checkAccess(email, role);
 
             if (allowed) {
                 // 3. Check for Ban/Kick Status
@@ -54,10 +48,16 @@ function LoginForm() {
                     router.push("/dashboard");
                 }
             } else {
-                setError("Access Denied: Invalid email, password, or role.");
+                setError("Access Denied: You are not authorized for this role.");
             }
         } catch (err: any) {
-            setError(err.message || "Failed to login.");
+            console.error("Login Check Error:", err);
+            // Improving error messages
+            if (err.code === "auth/invalid-credential" || err.code === "auth/user-not-found" || err.code === "auth/wrong-password") {
+                setError("Invalid email or password.");
+            } else {
+                setError(err.message || "Failed to login.");
+            }
         }
     };
 

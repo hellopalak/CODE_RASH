@@ -22,35 +22,22 @@ export const ALLOWED_ADMINS = [
  * Uses Firestore 'allowed_users' collection (Doc ID = email).
  * Fallback to static list for Admins to prevent lockout.
  */
-export const checkAccess = async (email: string, role: string, passwordInput?: string): Promise<boolean> => {
+export const checkAccess = async (email: string, role: string): Promise<boolean> => {
     // 1. Static Fallback (Critical for Admin access if DB fails/is empty)
     if (role === 'admin' && ALLOWED_ADMINS.includes(email)) return true;
 
-    // 2. Frontend Simulation Fallback (Removes in favor of DB for users)
-    // if (role === 'user' && ALLOWED_USERS.includes(email)) return true;
-
     try {
-        // Check Firestore: allowed_users/{email} -> { role: "user", password: "..." }
+        // Check Firestore: allowed_users/{email} -> { role: "user" }
         const docRef = doc(db, "allowed_users", email);
         const docSnap = await getDoc(docRef);
 
         if (docSnap.exists()) {
             const data = docSnap.data();
 
-            // Check Role
-            let roleOk = (data.role === role) || (data.role === 'admin');
-
-            // Check Password (if it exists in DB)
-            let passOk = true;
-            if (data.password) {
-                if (passwordInput && data.password === passwordInput) {
-                    passOk = true;
-                } else {
-                    passOk = false; // Pass required but wrong/missing
-                }
+            // Check Role (Admin in DB grants access to everything basically, or specific role match)
+            if ((data.role === role) || (data.role === 'admin')) {
+                return true;
             }
-
-            if (roleOk && passOk) return true;
         }
     } catch (error) {
         console.error("Error checking allowlist:", error);

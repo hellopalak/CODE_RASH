@@ -4,7 +4,10 @@ import { useState, useEffect } from "react";
 import { useContest } from "@/context/ContestContext";
 import { collection, onSnapshot, doc, updateDoc, setDoc, getDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { db, storage } from "@/lib/firebase";
+import { db, storage, auth } from "@/lib/firebase";
+import { onAuthStateChanged } from "firebase/auth";
+import { useRouter } from "next/navigation";
+import { checkAccess } from "@/lib/allowlist";
 import { ROUND1_QUESTIONS, ROUND3_QUESTIONS } from "@/lib/questions";
 
 interface UserData {
@@ -19,8 +22,14 @@ interface UserData {
 
 export default function AdminDashboard() {
     const { currentRoundId, currentTimeout, adminSetRound, adminSetTimer, adminResetContest } = useContest();
+    const router = useRouter();
     const [activeTab, setActiveTab] = useState<"dashboard" | "users" | "game" | "settings" | "questions">("dashboard");
     const [questionTab, setQuestionTab] = useState<"r1" | "r2" | "r3">("r1");
+
+    // Auth State
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
+
     // Questions State
     const [r1Questions, setR1Questions] = useState<any[]>([]);
     const [r3Questions, setR3Questions] = useState<any[]>([]);
@@ -41,7 +50,28 @@ export default function AdminDashboard() {
     // Permission Error Helper
     const [permissionError, setPermissionError] = useState(false);
 
+    // --- CHECK AUTH ---
+    useEffect(() => {
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                // Verify Admin Role
+                const isAllowed = await checkAccess(user.email || "", "admin");
+                if (isAllowed) {
+                    setIsAuthenticated(true);
+                } else {
+                    alert("Access Denied: You are not an Admin.");
+                    router.push("/login?role=admin");
+                }
+            } else {
+                router.push("/login?role=admin");
+            }
+            setIsLoading(false);
+        });
+        return () => unsubscribe();
+    }, [router]);
+
     const fetchQuestions = async () => {
+        if (!isAuthenticated) return;
         try {
             const r1Snap = await getDoc(doc(db, "contest_data", "round1"));
             if (r1Snap.exists()) setR1Questions(r1Snap.data().questions || []);
@@ -62,8 +92,8 @@ export default function AdminDashboard() {
     };
 
     useEffect(() => {
-        if (activeTab === "questions") fetchQuestions();
-    }, [activeTab]);
+        if (activeTab === "questions" && isAuthenticated) fetchQuestions();
+    }, [activeTab, isAuthenticated]);
 
     const handleAddQuestion = async (round: "r1" | "r3") => {
         setIsUploading(true);
@@ -174,8 +204,8 @@ export default function AdminDashboard() {
         alert("Round 2 Problems Saved!");
     };
     const [users, setUsers] = useState<UserData[]>([]);
-    const [isAuthenticated, setIsAuthenticated] = useState(false);
-    const [password, setPassword] = useState("");
+
+    // Auth handled by top-level state now
 
     const [lastUpdated, setLastUpdated] = useState<string>("");
     const [bulkEmails, setBulkEmails] = useState("");
@@ -216,7 +246,7 @@ export default function AdminDashboard() {
             link.click();
             document.body.removeChild(link);
 
-            alert(`Successfully added ${emails.length} users! Credentials downloaded.`);
+            alert(`Successfully added ${emails.length} users to the Allowlist! \n\nIMPORTANT: You must still create these users in the Firebase Console -> Authentication tab for them to be able to login.`);
             setBulkEmails("");
 
         } catch (e: any) {
@@ -226,6 +256,13 @@ export default function AdminDashboard() {
     };
 
     // --- Real-Time User Sync ---
+    const [tick, setTick] = useState(0); // Force re-render for offline status
+
+    useEffect(() => {
+        const timer = setInterval(() => setTick(t => t + 1), 30000); // Check every 30s
+        return () => clearInterval(timer);
+    }, []);
+
     useEffect(() => {
         if (!isAuthenticated) return;
 
@@ -241,12 +278,22 @@ export default function AdminDashboard() {
                     totalScore = Object.values(data.scores).reduce((acc: number, curr: any) => acc + (typeof curr === 'number' ? curr : 0), 0);
                 }
 
+                // Check Heartbeat (Offline if > 60s ago)
+                let computedStatus = data.status || "Offline";
+                if (data.lastActive) {
+                    const lastActiveTime = data.lastActive.toMillis ? data.lastActive.toMillis() : 0;
+                    const now = Date.now();
+                    if (now - lastActiveTime > 60000 && computedStatus === "Online") {
+                        computedStatus = "Offline";
+                    }
+                }
+
                 fetchedUsers.push({
                     id: doc.id,
                     name: data.name || "Unknown",
                     round: data.round || 0,
                     warnings: data.warnings || 0,
-                    status: data.status || "Offline",
+                    status: computedStatus,
                     score: totalScore,
                     team: data.team
                 } as UserData);
@@ -270,28 +317,8 @@ export default function AdminDashboard() {
                 backgroundColor: "#212529", backgroundImage: "radial-gradient(#333 1px, transparent 1px)", backgroundSize: "20px 20px"
             }}>
                 <div className="nes-container is-dark with-title is-centered" style={{ width: "400px" }}>
-                    <p className="title">Admin Login</p>
-                    <div className="nes-field">
-                        <input
-                            type="password"
-                            placeholder="Enter PIN"
-                            className="nes-input"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && (password === "admin123" ? setIsAuthenticated(true) : alert("Invalid PIN"))}
-                        />
-                    </div>
-                    <button
-                        className="nes-btn is-primary"
-                        style={{ marginTop: "20px", width: "100%" }}
-                        onClick={() => {
-                            if (password === "admin123") setIsAuthenticated(true);
-                            else alert("Invalid PIN");
-                        }}
-                    >
-                        ACCESS CONTROL
-                    </button>
-                    <p style={{ marginTop: "15px", fontSize: "0.7rem", color: "#666" }}>Restricted Access. Event Organizers Only.</p>
+                    <p className="title">Admin Access</p>
+                    <p>Verifying Credentials...</p>
                 </div>
             </div>
         );
@@ -373,7 +400,7 @@ export default function AdminDashboard() {
                 {/* Header */}
                 <header style={{ display: "flex", justifyContent: "space-between", marginBottom: "40px", alignItems: "center" }}>
                     <h2 style={{ margin: 0 }}>{activeTab.toUpperCase()}</h2>
-                    <button className="nes-btn is-error" onClick={() => setIsAuthenticated(false)}>LOGOUT</button>
+                    <button className="nes-btn is-error" onClick={() => auth.signOut()}>LOGOUT</button>
                 </header>
 
                 {/* Content Widgets */}
@@ -588,7 +615,7 @@ export default function AdminDashboard() {
                                     <div className="nes-container is-rounded is-dark" style={{ marginBottom: "30px", border: "2px dashed #555" }}>
                                         <p>Add New Question</p>
                                         <div className="nes-field" style={{ marginBottom: "10px" }}>
-                                            <label>Question Text</label>
+                                            <label>Question Text <span style={{ fontSize: "0.7rem", color: "#888" }}>(Optional if Image is used)</span></label>
                                             <input type="text" className="nes-input" value={newQText} onChange={e => setNewQText(e.target.value)} />
                                         </div>
                                         <div className="nes-field" style={{ marginBottom: "10px" }}>
@@ -596,7 +623,8 @@ export default function AdminDashboard() {
                                             <textarea className="nes-textarea" value={newQCode} onChange={e => setNewQCode(e.target.value)} style={{ height: "60px" }}></textarea>
                                         </div>
                                         <div className="nes-field" style={{ marginBottom: "10px" }}>
-                                            <label>Image (Optional) {newQImage && <span className="is-success">- Selected: {newQImage.name}</span>}</label>
+                                            <label style={{ color: "#F7D51D" }}>Upload Question Image</label>
+                                            {newQImage && <span className="is-success" style={{ marginLeft: "10px" }}>- Selected: {newQImage.name}</span>}
                                             <input type="file" accept="image/*" onChange={e => setNewQImage(e.target.files?.[0] || null)} />
                                         </div>
                                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "10px" }}>
@@ -641,7 +669,14 @@ export default function AdminDashboard() {
                                                 {(questionTab === "r1" ? r1Questions : r3Questions).map((q, idx) => (
                                                     <tr key={idx}>
                                                         <td>{idx + 1}</td>
-                                                        <td style={{ fontSize: "0.8rem" }}>{q.text.substring(0, 50)}...</td>
+                                                        <td style={{ fontSize: "0.8rem" }}>
+                                                            {q.image && (
+                                                                <div style={{ marginBottom: "5px" }}>
+                                                                    <img src={q.image} alt="Question" style={{ maxHeight: "50px", border: "1px solid #fff" }} />
+                                                                </div>
+                                                            )}
+                                                            {q.text ? q.text.substring(0, 50) + (q.text.length > 50 ? "..." : "") : <em style={{ color: "#888" }}>[Image Only]</em>}
+                                                        </td>
                                                         <td>
                                                             <button className="nes-btn is-error is-small" onClick={() => handleDeleteQuestion(questionTab, idx)}>DEL</button>
                                                         </td>
@@ -803,6 +838,12 @@ export default function AdminDashboard() {
                                 <p style={{ fontSize: "0.8rem", marginBottom: "10px" }}>
                                     Paste email addresses below (one per line).
                                     A downloadable CSV with passwords will be generated.
+                                    <br />
+                                    <strong style={{ color: "red" }}>NOTE:</strong> After adding here, you MUST create them in:
+                                    <br />
+                                    <a href="https://console.firebase.google.com/" target="_blank" style={{ color: "cyan", textDecoration: "underline" }}>
+                                        Firebase Console &gt; Authentication
+                                    </a>
                                 </p>
                                 <textarea
                                     className="nes-textarea is-dark"

@@ -17,6 +17,7 @@ interface UserData {
     warnings: number;
     status: "Online" | "Offline" | "Disqualified" | "Kicked";
     score?: number;
+    scores?: { round1?: number; round2?: number; round3?: number; round4?: number };
     team?: string;
 }
 
@@ -209,6 +210,8 @@ export default function AdminDashboard() {
 
     const [lastUpdated, setLastUpdated] = useState<string>("");
     const [bulkEmails, setBulkEmails] = useState("");
+    // Track which cells are locked: key = `${userId}-r2` or `${userId}-r4`
+    const [lockedScores, setLockedScores] = useState<Record<string, boolean>>({});
 
     // --- Bulk Upload Logic ---
     const handleBulkAdd = async () => {
@@ -360,15 +363,41 @@ export default function AdminDashboard() {
     };
 
     const handleForgive = async (id: string) => {
-        await updateDoc(doc(db, "users", id), { warnings: 0, status: "Online" });
+        if (confirm("Reset this user's warnings to 0?")) {
+            await updateDoc(doc(db, "users", id), { warnings: 0 });
+        }
     };
 
 
+
+
+    const handleScoreUpdate = async (userId: string, roundKey: string, value: string) => {
+        const score = parseInt(value);
+        if (isNaN(score)) return;
+
+        try {
+            await updateDoc(doc(db, "users", userId), {
+                [`scores.${roundKey}`]: score
+            });
+            // Lock the cell after saving
+            const lockKey = roundKey === 'round2' ? `${userId}-r2` : `${userId}-r4`;
+            setLockedScores(prev => ({ ...prev, [lockKey]: true }));
+        } catch (e) {
+            console.error("Error updating score:", e);
+            alert("Failed to update score");
+        }
+    };
+
+    const unlockScore = (userId: string, round: 'r2' | 'r4') => {
+        const lockKey = `${userId}-${round}`;
+        setLockedScores(prev => ({ ...prev, [lockKey]: false }));
+    };
 
     // --- Layout ---
     return (
         <div style={{ display: "flex", height: "100vh", backgroundColor: "#212529", color: "#fff", fontFamily: "'Segoe UI', 'Roboto', 'Helvetica Neue', sans-serif" }}>
 
+            {/* ... Sidebar omitted for brevity, logic remains ... */}
             {/* Sidebar */}
             <aside style={{
                 width: "260px", backgroundColor: "#000", borderRight: "4px solid #fff",
@@ -477,40 +506,92 @@ export default function AdminDashboard() {
                                 <table className="nes-table is-bordered is-dark" style={{ width: "100%", fontSize: "0.9rem" }}>
                                     <thead>
                                         <tr>
-                                            <th style={{ padding: "15px" }}>ID</th>
-                                            <th style={{ padding: "15px" }}>Player</th>
-                                            <th style={{ padding: "15px" }}>Team</th>
-                                            <th style={{ padding: "15px" }}>Score</th>
-                                            <th style={{ padding: "15px" }}>Round</th>
-                                            <th style={{ padding: "15px" }}>Warnings</th>
-                                            <th style={{ padding: "15px" }}>Status</th>
-                                            <th style={{ padding: "15px" }}>Actions</th>
+                                            <th style={{ padding: "10px" }}>ID</th>
+                                            <th style={{ padding: "10px" }}>Player</th>
+                                            <th style={{ padding: "10px" }}>Team</th>
+                                            <th style={{ padding: "10px" }}>DSA (R2)</th>
+                                            <th style={{ padding: "10px" }}>Dev (R4)</th>
+                                            <th style={{ padding: "10px", color: "#00C853" }}>Total</th>
+                                            <th style={{ padding: "10px" }}>Warnings</th>
+                                            <th style={{ padding: "10px" }}>Status</th>
+                                            <th style={{ padding: "10px" }}>Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {users.map(user => (
                                             <tr key={user.id}>
-                                                <td style={{ fontSize: "0.75rem", padding: "15px" }}>{(user.id || "").substring(0, 8)}...</td>
-                                                <td style={{ fontWeight: "bold", padding: "15px" }}>{user.name}</td>
-                                                <td style={{ color: "#F7D51D", padding: "15px" }}>{user.team || "-"}</td>
-                                                <td style={{ color: "#00C853", padding: "15px", fontWeight: "bold" }}>{user.score || 0}</td>
-                                                <td style={{ padding: "15px" }}>{user.round}</td>
-                                                <td style={{ padding: "15px" }}>
+                                                <td style={{ fontSize: "0.75rem", padding: "10px" }}>{(user.id || "").substring(0, 6)}...</td>
+                                                <td style={{ fontWeight: "bold", padding: "10px" }}>{user.name}</td>
+                                                <td style={{ color: "#F7D51D", padding: "10px" }}>{user.team || "-"}</td>
+
+                                                {/* DSA (R2) - Manual, Lockable */}
+                                                <td style={{ padding: "5px" }}>
+                                                    {(user.scores?.round2 !== undefined && user.scores.round2 > 0 && lockedScores[`${user.id}-r2`] !== false) ? (
+                                                        <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                                                            <span style={{ color: "#92cc41", fontWeight: "bold" }}>🔒 {user.scores.round2}</span>
+                                                            <button
+                                                                className="nes-btn is-small"
+                                                                style={{ padding: "2px 6px", fontSize: "0.6rem" }}
+                                                                onClick={() => unlockScore(user.id, 'r2')}
+                                                                title="Unlock to edit"
+                                                            >✏️</button>
+                                                        </div>
+                                                    ) : (
+                                                        <input
+                                                            key={`r2-${user.id}-${user.scores?.round2}`}
+                                                            type="number"
+                                                            className="nes-input is-dark"
+                                                            style={{ width: "80px", padding: "5px", height: "auto" }}
+                                                            defaultValue={user.scores?.round2 ?? 0}
+                                                            onBlur={(e) => handleScoreUpdate(user.id, 'round2', e.target.value)}
+                                                        />
+                                                    )}
+                                                </td>
+
+                                                {/* Dev (R4) - Manual, Lockable */}
+                                                <td style={{ padding: "5px" }}>
+                                                    {(user.scores?.round4 !== undefined && user.scores.round4 > 0 && lockedScores[`${user.id}-r4`] !== false) ? (
+                                                        <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                                                            <span style={{ color: "#92cc41", fontWeight: "bold" }}>🔒 {user.scores.round4}</span>
+                                                            <button
+                                                                className="nes-btn is-small"
+                                                                style={{ padding: "2px 6px", fontSize: "0.6rem" }}
+                                                                onClick={() => unlockScore(user.id, 'r4')}
+                                                                title="Unlock to edit"
+                                                            >✏️</button>
+                                                        </div>
+                                                    ) : (
+                                                        <input
+                                                            key={`r4-${user.id}-${user.scores?.round4}`}
+                                                            type="number"
+                                                            className="nes-input is-dark"
+                                                            style={{ width: "80px", padding: "5px", height: "auto" }}
+                                                            defaultValue={user.scores?.round4 ?? 0}
+                                                            onBlur={(e) => handleScoreUpdate(user.id, 'round4', e.target.value)}
+                                                        />
+                                                    )}
+                                                </td>
+
+                                                {/* Total Score */}
+                                                <td style={{ color: "#00C853", padding: "10px", fontWeight: "bold", fontSize: "1.1em" }}>{user.score || 0}</td>
+
+                                                <td style={{ padding: "10px" }}>
                                                     {user.warnings || 0}/3
                                                 </td>
-                                                <td style={{ padding: "15px" }}>
+                                                <td style={{ padding: "10px" }}>
                                                     {user.status === "Online" && <span className="nes-text is-success">Online</span>}
                                                     {user.status === "Disqualified" && <span className="nes-text is-error">DQ'd</span>}
                                                     {user.status === "Offline" && <span className="nes-text is-disabled">Offline</span>}
                                                     {user.status === "Kicked" && <span className="nes-text is-error">BANNED</span>}
                                                 </td>
-                                                <td style={{ padding: "15px" }}>
-                                                    <div style={{ display: "flex", gap: "10px" }}>
+                                                <td style={{ padding: "10px" }}>
+                                                    <div style={{ display: "flex", gap: "5px" }}>
                                                         <button
                                                             className="nes-btn is-error is-small"
                                                             disabled={user.status === "Kicked"}
                                                             onClick={() => handleKick(user.id)}
                                                             title="Ban User"
+                                                            style={{ padding: "5px 10px" }}
                                                         >
                                                             BAN
                                                         </button>
@@ -519,6 +600,7 @@ export default function AdminDashboard() {
                                                             disabled={!user.warnings || user.warnings === 0}
                                                             onClick={() => handleForgive(user.id)}
                                                             title="Reset Warnings"
+                                                            style={{ padding: "5px 10px" }}
                                                         >
                                                             RST
                                                         </button>
@@ -528,7 +610,7 @@ export default function AdminDashboard() {
                                         ))}
                                         {users.length === 0 && (
                                             <tr>
-                                                <td colSpan={6} style={{ textAlign: "center" }}>Waiting for players...</td>
+                                                <td colSpan={9} style={{ textAlign: "center" }}>Waiting for players...</td>
                                             </tr>
                                         )}
                                     </tbody>

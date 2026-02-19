@@ -17,12 +17,20 @@ function LoginForm() {
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
-        setError(""); // Clear previous errors
+        setError("");
 
         try {
+            if (role === "admin") {
+                // Admin: use real Firebase Auth so onAuthStateChanged works in /admin
+                await signInWithEmailAndPassword(auth, email, password);
+                // checkAccess is called inside the admin page after auth state confirms
+                localStorage.setItem("contest_user_email", email);
+                localStorage.setItem("contest_user_role", "admin");
+                router.push("/admin");
+                return;
+            }
 
-            // REVERTED TO: Custom Database Login (Insecure but requested)
-            // 1. Check if user exists in 'allowed_users' and password matches
+            // Regular users: check Firestore allowed_users collection
             const userDocRef = doc(db, "allowed_users", email);
             const userDocSnap = await getDoc(userDocRef);
 
@@ -35,40 +43,31 @@ function LoginForm() {
                 throw new Error("Invalid password.");
             }
 
-            // 2. "Fake" Sign In (Since we aren't using Firebase Auth for credentials anymore)
-            // We need a way to maintain session. 
-            // The previous "Public Rules" method likely relied on localStorage or similar, OR 
-            // we sign in ANONYMOUSLY to get a UID, but treat them as this email.
-            // Let's use localStorage for simplicity as requested "just like before".
             localStorage.setItem("contest_user_email", email);
             localStorage.setItem("contest_user_role", role);
 
-            // NOTE: Since we aren't using Firebase Auth 'signInWithEmailAndPassword',
-            // 'auth.currentUser' will be null unless we do 'signInAnonymously'.
-            // To make RLS work with 'if true' rules, this is fine.
-
-            // 3. Check for Ban/Kick Status
-            if (role === "user") {
-                const userRef = doc(db, "users", email);
-                const userSnap = await getDoc(userRef);
-                if (userSnap.exists()) {
-                    const data = userSnap.data();
-                    if (data.status === "Kicked" || data.status === "Disqualified") {
-                        setError("ACCOUNT BANNED: You have been kicked/disqualified from this contest.");
-                        return;
-                    }
+            // Check for Ban/Kick Status
+            const userRef = doc(db, "users", email);
+            const userSnap = await getDoc(userRef);
+            if (userSnap.exists()) {
+                const data = userSnap.data();
+                if (data.status === "Kicked" || data.status === "Disqualified") {
+                    setError("ACCOUNT BANNED: You have been kicked/disqualified from this contest.");
+                    return;
                 }
             }
 
-            if (role === "admin") router.push("/admin");
-            else if (role === "evaluator") router.push("/evaluator");
-            else {
-                localStorage.setItem("contest_user_email", email);
-                router.push("/dashboard");
-            }
+            if (role === "evaluator") router.push("/evaluator");
+            else router.push("/dashboard");
+
         } catch (err: any) {
             console.error("Login Check Error:", err);
-            setError(err.message || "Failed to login.");
+            // Make Firebase Auth errors user-friendly
+            if (err.code === "auth/user-not-found" || err.code === "auth/wrong-password" || err.code === "auth/invalid-credential") {
+                setError("Invalid email or password.");
+            } else {
+                setError(err.message || "Failed to login.");
+            }
         }
     };
 

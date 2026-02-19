@@ -68,13 +68,11 @@ export default function Round1Page() {
     const handleSubmit = async () => {
         if (!confirm("Are you sure you want to submit your answers? This cannot be undone.")) return;
 
-        // Calculate Score
+        // Calculate Score: 10 points per correct answer
         let finalScore = 0;
         questions.forEach((q, idx) => {
             if (answers[idx] === q.answer) {
-                finalScore += 10; // +10 per correct answer
-                // User didn't specify scoring, assuming existing logic (+5).
-                // If 10 questions, max is 50.
+                finalScore += 10;
             }
         });
 

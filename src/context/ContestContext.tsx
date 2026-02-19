@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { db } from "@/lib/firebase";
-import { doc, onSnapshot, updateDoc, setDoc, Timestamp, getDoc } from "firebase/firestore";
+import { doc, onSnapshot, updateDoc, setDoc, Timestamp } from "firebase/firestore";
 
 interface RoundStatus {
     id: 1 | 2 | 3 | 4;
@@ -69,8 +69,10 @@ export const ContestProvider = ({ children }: { children: React.ReactNode }) => 
         // B. User Presence / Heartbeat
         let heartbeatInterval: NodeJS.Timeout;
         const myEmail = localStorage.getItem("contest_user_email");
+        const myRole = localStorage.getItem("contest_user_role");
 
-        if (myEmail) {
+        // Admins and evaluators should NOT appear as players
+        if (myEmail && myRole === "user") {
             const userDocRef = doc(db, "users", myEmail);
 
             // 1. Initial "Online" Status
@@ -120,7 +122,9 @@ export const ContestProvider = ({ children }: { children: React.ReactNode }) => 
     // --- 1.5 SEPARATE HEARTBEAT & BAN CHECK (Depends on Round) ---
     useEffect(() => {
         const myEmail = localStorage.getItem("contest_user_email");
-        if (!myEmail) return;
+        const myRole = localStorage.getItem("contest_user_role");
+        // Skip for admins/evaluators — they are not players
+        if (!myEmail || myRole !== "user") return;
 
         const userDocRef = doc(db, "users", myEmail);
         let isBanned = false; // Local flag to stop heartbeat writes
@@ -141,27 +145,19 @@ export const ContestProvider = ({ children }: { children: React.ReactNode }) => 
             }
         });
 
-        // B. Heartbeat: Update Round Progress & Team Name
+        // B. Heartbeat: Update presence info only (NOT team name — managed by user)
         const updateProgress = async () => {
-            if (isBanned) return; // Stop writing if banned
+            if (isBanned) return;
 
             try {
-                // Fetch Team Name from Allowlist if not known (Optimization: could cache in local)
-                let teamName = "Unknown";
-                try {
-                    const allowDoc = await getDoc(doc(db, "allowed_users", myEmail));
-                    if (allowDoc.exists()) {
-                        teamName = allowDoc.data().teamName || "Unknown";
-                    }
-                } catch (err) { console.error("Error fetching team", err); }
-
                 await setDoc(userDocRef, {
                     id: myEmail,
                     name: myEmail.split("@")[0],
-                    team: teamName, // Added Team
                     status: "Online",
                     lastActive: Timestamp.now(),
                     round: currentRoundId
+                    // NOTE: 'team' is intentionally excluded — the user sets it
+                    // themselves and it must not be overwritten by the heartbeat
                 }, { merge: true });
             } catch (e) { console.error("Heartbeat error", e); }
         };

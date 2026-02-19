@@ -25,7 +25,7 @@ export default function AdminDashboard() {
     const { currentRoundId, currentTimeout, adminSetRound, adminSetTimer, adminResetContest } = useContest();
     const router = useRouter();
     const [activeTab, setActiveTab] = useState<"dashboard" | "users" | "game" | "settings" | "questions">("dashboard");
-    const [questionTab, setQuestionTab] = useState<"r1" | "r2" | "r3">("r1");
+    const [questionTab, setQuestionTab] = useState<"r1" | "r2" | "r3" | "r4">("r1");
 
     // Auth State
     const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -43,16 +43,31 @@ export default function AdminDashboard() {
     const [newQText, setNewQText] = useState("");
     const [newQOptions, setNewQOptions] = useState(["", "", "", ""]);
     const [newQAns, setNewQAns] = useState(0);
-    const [newQCode, setNewQCode] = useState(""); // Optional code snippet
-    const [newQImage, setNewQImage] = useState<File | null>(null); // Optional image
+    const [newQCode, setNewQCode] = useState("");
+    const [newQImage, setNewQImage] = useState<File | null>(null);
+    const [newQImageUrl, setNewQImageUrl] = useState(""); // Cloudinary / external URL
     const [isUploading, setIsUploading] = useState(false);
     const [bulkJson, setBulkJson] = useState("");
 
     // Permission Error Helper
     const [permissionError, setPermissionError] = useState(false);
+    // Round 4 Figma Link
+    const [figmaLink, setFigmaLink] = useState("");
+    const [figmaLinkInput, setFigmaLinkInput] = useState("");
 
     // --- CHECK AUTH ---
     useEffect(() => {
+        // Load figma link from Firestore on mount
+        const loadFigmaLink = async () => {
+            try {
+                const snap = await getDoc(doc(db, "contest_data", "round4"));
+                if (snap.exists() && snap.data().figmaLink) {
+                    setFigmaLink(snap.data().figmaLink);
+                    setFigmaLinkInput(snap.data().figmaLink);
+                }
+            } catch (e) { console.error("Error loading figmaLink", e); }
+        };
+        loadFigmaLink();
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
                 // Verify Admin Role
@@ -98,10 +113,11 @@ export default function AdminDashboard() {
 
     const handleAddQuestion = async (round: "r1" | "r3") => {
         setIsUploading(true);
-        let imageUrl = "";
+        let imageUrl = newQImageUrl.trim(); // Prefer pasted URL (Cloudinary etc.)
 
         try {
-            if (newQImage) {
+            // Only upload file if no URL was pasted
+            if (!imageUrl && newQImage) {
                 const storageRef = ref(storage, `question_images/${Date.now()}_${newQImage.name}`);
                 await uploadBytes(storageRef, newQImage);
                 imageUrl = await getDownloadURL(storageRef);
@@ -129,6 +145,7 @@ export default function AdminDashboard() {
             setNewQAns(0);
             setNewQCode("");
             setNewQImage(null);
+            setNewQImageUrl("");
             setIsUploading(false);
             alert("Question Added!");
         } catch (e: any) {
@@ -391,6 +408,46 @@ export default function AdminDashboard() {
     const unlockScore = (userId: string, round: 'r2' | 'r4') => {
         const lockKey = `${userId}-${round}`;
         setLockedScores(prev => ({ ...prev, [lockKey]: false }));
+    };
+
+    const handleSaveFigmaLink = async () => {
+        const url = figmaLinkInput.trim();
+        if (!url) return;
+        try {
+            await setDoc(doc(db, "contest_data", "round4"), { figmaLink: url }, { merge: true });
+            setFigmaLink(url);
+            alert("Figma link saved! Players will see it when Round 4 is active.");
+        } catch (e: any) {
+            alert("Error saving link: " + e.message);
+        }
+    };
+
+    const handleFactoryReset = async () => {
+        if (!confirm("ARE YOU SURE? This will erase ALL player scores and round progress. This CANNOT be undone.")) return;
+        if (!confirm("SECOND CONFIRMATION: All scores will be reset to 0 for every player. Proceed?")) return;
+
+        try {
+            // 1. Reset every user's scores and completedRoundIds in parallel
+            const resetPromises = users.map(user =>
+                updateDoc(doc(db, "users", user.id), {
+                    scores: { round1: 0, round2: 0, round3: 0, round4: 0 },
+                    completedRoundIds: [],
+                    score: 0
+                })
+            );
+            await Promise.all(resetPromises);
+
+            // 2. Reset global contest state to Round 1
+            await adminResetContest();
+
+            // 3. Clear local lock state
+            setLockedScores({});
+
+            alert(`Factory Reset Complete! ${users.length} players reset to 0.`);
+        } catch (e: any) {
+            console.error("Factory Reset Error:", e);
+            alert("Error during reset: " + e.message);
+        }
     };
 
     // --- Layout ---
@@ -656,12 +713,16 @@ export default function AdminDashboard() {
                                 </div>
                             </div>
 
+
                             {/* Emergency Zone */}
                             <div className="nes-container is-rounded is-dark" style={{ borderColor: "red" }}>
                                 <p style={{ color: "red", fontWeight: "bold" }}>DANGER ZONE</p>
                                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                    <p>Reset the entire contest state. All progress will be lost.</p>
-                                    <button className="nes-btn is-error" onClick={() => { if (confirm("ARE YOU SURE? THIS CANNOT BE UNDONE.")) adminResetContest(); }}>
+                                    <div>
+                                        <p style={{ margin: 0 }}>Reset the entire contest state.</p>
+                                        <p style={{ margin: 0, fontSize: "0.75rem", color: "#aaa" }}>Zeroes all player scores, clears round progress, resets to Round 1.</p>
+                                    </div>
+                                    <button className="nes-btn is-error" onClick={handleFactoryReset}>
                                         FACTORY RESET
                                     </button>
                                 </div>
@@ -676,8 +737,37 @@ export default function AdminDashboard() {
                             <div style={{ marginBottom: "20px" }}>
                                 <button className={`nes-btn ${questionTab === "r1" ? "is-primary" : ""}`} onClick={() => setQuestionTab("r1")} style={{ marginRight: "10px" }}>Logic (R1)</button>
                                 <button className={`nes-btn ${questionTab === "r2" ? "is-warning" : ""}`} onClick={() => setQuestionTab("r2")} style={{ marginRight: "10px" }}>DSA (R2)</button>
-                                <button className={`nes-btn ${questionTab === "r3" ? "is-success" : ""}`} onClick={() => setQuestionTab("r3")}>Tech Quiz (R3)</button>
+                                <button className={`nes-btn ${questionTab === "r3" ? "is-success" : ""}`} onClick={() => setQuestionTab("r3")} style={{ marginRight: "10px" }}>Tech Quiz (R3)</button>
+                                <button className={`nes-btn ${questionTab === "r4" ? "is-error" : ""}`} onClick={() => setQuestionTab("r4")}>Web Dev (R4)</button>
                             </div>
+
+                            {/* ROUND 4 — FIGMA LINK */}
+                            {questionTab === "r4" && (
+                                <div className="nes-container is-dark with-title">
+                                    <p className="title">Web Development — Figma Design Link</p>
+                                    <p style={{ marginBottom: "15px", color: "#92cc41", fontSize: "0.85rem" }}>
+                                        Players in Round 4 will see a button to open this Figma file. They code the design locally in VS Code.
+                                    </p>
+                                    <div style={{ display: "flex", gap: "10px", alignItems: "flex-start", flexWrap: "wrap" }}>
+                                        <input
+                                            type="text"
+                                            className="nes-input is-dark"
+                                            style={{ flex: 1, minWidth: "300px" }}
+                                            placeholder="https://www.figma.com/file/..."
+                                            value={figmaLinkInput}
+                                            onChange={e => setFigmaLinkInput(e.target.value)}
+                                        />
+                                        <button className="nes-btn is-success" onClick={handleSaveFigmaLink}>
+                                            SAVE LINK
+                                        </button>
+                                    </div>
+                                    {figmaLink && (
+                                        <p style={{ marginTop: "10px", fontSize: "0.8rem" }}>
+                                            ✅ Current: <a href={figmaLink} target="_blank" rel="noreferrer" style={{ color: "#209cee" }}>{figmaLink}</a>
+                                        </p>
+                                    )}
+                                </div>
+                            )}
 
                             {/* ROUND 1 & 3 EDITOR */}
                             {(questionTab === "r1" || questionTab === "r3") && (
@@ -733,8 +823,31 @@ export default function AdminDashboard() {
                                             <textarea className="nes-textarea" value={newQCode} onChange={e => setNewQCode(e.target.value)} style={{ height: "60px" }}></textarea>
                                         </div>
                                         <div className="nes-field" style={{ marginBottom: "10px" }}>
-                                            <label style={{ color: "#F7D51D" }}>Upload Question Image</label>
-                                            {newQImage && <span className="is-success" style={{ marginLeft: "10px" }}>- Selected: {newQImage.name}</span>}
+                                            <label style={{ color: "#92cc41" }}>
+                                                🔗 Image URL <span style={{ fontSize: "0.7rem", color: "#888" }}>(Cloudinary / any public URL — recommended)</span>
+                                            </label>
+                                            <input
+                                                type="text"
+                                                className="nes-input is-dark"
+                                                placeholder="https://res.cloudinary.com/your-cloud/image/upload/..."
+                                                value={newQImageUrl}
+                                                onChange={e => setNewQImageUrl(e.target.value)}
+                                            />
+                                            {newQImageUrl && (
+                                                <img
+                                                    src={newQImageUrl}
+                                                    alt="Preview"
+                                                    style={{ marginTop: "8px", maxHeight: "80px", border: "2px solid #92cc41", borderRadius: "4px" }}
+                                                    onError={e => (e.currentTarget.style.display = "none")}
+                                                    onLoad={e => (e.currentTarget.style.display = "block")}
+                                                />
+                                            )}
+                                        </div>
+                                        <div className="nes-field" style={{ marginBottom: "10px" }}>
+                                            <label style={{ color: "#888", fontSize: "0.8rem" }}>
+                                                📁 Or Upload File to Firebase Storage <span style={{ color: "#555" }}>(only used if no URL above)</span>
+                                            </label>
+                                            {newQImage && <span className="is-success" style={{ marginLeft: "10px", fontSize: "0.8rem" }}>Selected: {newQImage.name}</span>}
                                             <input type="file" accept="image/*" onChange={e => setNewQImage(e.target.files?.[0] || null)} />
                                         </div>
                                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "10px" }}>

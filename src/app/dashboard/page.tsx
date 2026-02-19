@@ -29,18 +29,16 @@ export default function UserDashboard() {
     useEffect(() => {
         const myEmail = localStorage.getItem("contest_user_email");
         if (!myEmail) {
-            // Optional: Redirect to login if not found
+            window.location.href = "/login";
             return;
         }
 
         // 1. Ensure User Exists in 'users' collection (for Admin Panel visibility)
-        // We do this blindly to ensure "Online" status and existence
         try {
             setDoc(doc(db, "users", myEmail), {
                 email: myEmail,
                 status: "Online",
                 lastActive: Date.now(),
-                // Keep existing data if any, but ensure these fields
             }, { merge: true });
         } catch (e) {
             console.error("Error updating user status:", e);
@@ -49,15 +47,24 @@ export default function UserDashboard() {
         const unsub = onSnapshot(doc(db, "users", myEmail), (docSnap) => {
             if (docSnap.exists()) {
                 const data = docSnap.data();
+
+                // 🚫 BAN CHECK: Kicked or Disqualified → force logout immediately
+                if (data.status === "Kicked" || data.status === "Disqualified") {
+                    localStorage.removeItem("contest_user_email");
+                    localStorage.removeItem("contest_user_role");
+                    alert("⛔ You have been disqualified/kicked from this contest.");
+                    window.location.href = "/login";
+                    return;
+                }
+
                 setUserData({
                     name: data.name || myEmail.split("@")[0],
                     teamName: data.team || "",
-                    score: (data.scores?.round1 || 0) + (data.scores?.round3 || 0), // Aggregate score
-                    scores: data.scores || {}, // Store individual scores
+                    score: (data.scores?.round1 || 0) + (data.scores?.round2 || 0) + (data.scores?.round3 || 0) + (data.scores?.round4 || 0),
+                    scores: data.scores || {},
                     completedRoundIds: data.completedRoundIds || []
                 });
             } else {
-                // If doesn't exist yet (snap might happen before setDoc finishes), init local
                 setUserData({ name: myEmail.split("@")[0], score: 0 });
             }
         });
@@ -69,11 +76,11 @@ export default function UserDashboard() {
         const email = localStorage.getItem("contest_user_email");
         if (!email) return;
 
-        // Note: We rely on Firestore 'onSnapshot' to update the UI (latency compensation)
-        // We DO NOT manually set userData here to avoid race conditions.
-
         try {
+            // Write to both collections so the ContestContext heartbeat
+            // (which reads allowed_users.teamName) doesn't overwrite our value
             await updateDoc(doc(db, "users", email), { team: newName });
+            await updateDoc(doc(db, "allowed_users", email), { teamName: newName });
         } catch (e) {
             console.error("Error updating team name:", e);
         }
@@ -116,7 +123,7 @@ export default function UserDashboard() {
                     <div style={{ display: "flex", flexDirection: "column", gap: "1rem", alignItems: "center" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                             <span>TEAM:</span>
-                            {userData?.teamName ? (
+                            {(userData?.teamName && userData.teamName !== "Unknown") ? (
                                 <span className="nes-text is-success" style={{ fontSize: "1.2rem", fontWeight: "bold" }}>
                                     {userData.teamName}
                                 </span>
@@ -256,7 +263,7 @@ export default function UserDashboard() {
                             <div className="nes-container is-rounded is-dark" style={{ border: "2px solid #555" }}>
                                 <p style={{ marginBottom: "0.5rem", color: "#888", fontSize: "0.8rem" }}>TEAM AFFILIATION</p>
                                 <p style={{ margin: 0, color: "#00ff00", fontSize: "1.2rem" }}>
-                                    {userData?.teamName ? `TEAM ${userData.teamName}` : "NO TEAM"}
+                                    {(userData?.teamName && userData.teamName !== "Unknown") ? `TEAM ${userData.teamName}` : "NO TEAM"}
                                 </p>
                             </div>
 

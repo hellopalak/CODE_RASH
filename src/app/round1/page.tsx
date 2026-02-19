@@ -24,6 +24,27 @@ export default function Round1Page() {
         }
     }, [currentTimeout, router]);
 
+    // 🚫 Ban Check on Mount: redirect disqualified/kicked users immediately
+    useEffect(() => {
+        const checkBan = async () => {
+            const myEmail = localStorage.getItem("contest_user_email");
+            if (!myEmail) { window.location.href = "/login"; return; }
+            try {
+                const snap = await getDoc(doc(db, "users", myEmail));
+                if (snap.exists()) {
+                    const s = snap.data().status;
+                    if (s === "Kicked" || s === "Disqualified") {
+                        localStorage.removeItem("contest_user_email");
+                        localStorage.removeItem("contest_user_role");
+                        alert("⛔ You have been disqualified from this contest.");
+                        window.location.href = "/login";
+                    }
+                }
+            } catch (e) { console.error("Ban check error", e); }
+        };
+        checkBan();
+    }, []);
+
     // Fetch Questions from DB (optional override)
     useEffect(() => {
         const fetchQs = async () => {

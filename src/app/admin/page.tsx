@@ -220,23 +220,51 @@ export default function AdminDashboard() {
         const emails = bulkEmails.split(/[\n,]+/).map(e => e.trim()).filter(e => e);
         if (emails.length === 0) return;
 
-        if (!confirm(`Add ${emails.length} users? This will generate passwords for them.`)) return;
+        if (!confirm(`Add ${emails.length} users? This will create accounts in Firebase Auth and generate a CSV.`)) return;
 
         const credentials: { email: string, pass: string }[] = [];
 
         try {
+            // 1. Generate local credentials
             for (const email of emails) {
                 const pass = Math.random().toString(36).slice(-8);
-                await setDoc(doc(db, "allowed_users", email), {
-                    role: "user",
-                    password: pass
-                });
                 credentials.push({ email, pass });
             }
 
+            // 2. Call API to create users in Firebase Auth
+            // We send the list to the server so it can use firebase-admin
+            const response = await fetch('/api/admin/create-users', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ users: credentials })
+            });
+
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.error || "Failed to create users");
+
+            console.log("API Result:", result);
+
+            // Check if any users failed
+            const failedUsers = result.results?.filter((r: any) => r.status === 'failed');
+            if (failedUsers?.length > 0) {
+                console.error("Some users failed:", failedUsers);
+                alert(`Warning: ${failedUsers.length} users failed to create.\nFirst error: ${failedUsers[0].error}`);
+            }
+
+            // 3. Save to Firestore 'allowed_users' (for reference/roles)
+            // We still do this client-side or we could move it to API too.
+            // Keeping it here is fine for now as we have logic for it.
+            for (const cred of credentials) {
+                await setDoc(doc(db, "allowed_users", cred.email), {
+                    role: "user",
+                    password: cred.pass
+                });
+            }
+
+            // 4. Generate CSV
             const csvContent = "data:text/csv;charset=utf-8,"
                 + "Email,Password\n"
-                + credentials.map(c => `${c.email},${c.pass}`).join("\n");
+                + credentials.map(c => `${c.email},${c.pass}`).join("\n"); // Handle case sensitivity if needed
 
             const encodedUri = encodeURI(csvContent);
             const link = document.createElement("a");
@@ -246,7 +274,7 @@ export default function AdminDashboard() {
             link.click();
             document.body.removeChild(link);
 
-            alert(`Successfully added ${emails.length} users to the Allowlist! \n\nIMPORTANT: You must still create these users in the Firebase Console -> Authentication tab for them to be able to login.`);
+            alert(`Successfully created ${emails.length} users! \n\n1. Accounts Created in Firebase.\n2. Added to Allowlist.\n3. CSV Downloaded.`);
             setBulkEmails("");
 
         } catch (e: any) {

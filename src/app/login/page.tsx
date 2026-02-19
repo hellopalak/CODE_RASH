@@ -20,44 +20,55 @@ function LoginForm() {
         setError(""); // Clear previous errors
 
         try {
-            // 1. Authenticate with Firebase
-            await signInWithEmailAndPassword(auth, email, password);
 
-            // 2. Check Access Control (Role-based Only)
-            // We pass email and role. Authenticated user implies password was correct.
-            const allowed = await checkAccess(email, role);
+            // REVERTED TO: Custom Database Login (Insecure but requested)
+            // 1. Check if user exists in 'allowed_users' and password matches
+            const userDocRef = doc(db, "allowed_users", email);
+            const userDocSnap = await getDoc(userDocRef);
 
-            if (allowed) {
-                // 3. Check for Ban/Kick Status
-                if (role === "user") {
-                    const userRef = doc(db, "users", email);
-                    const userSnap = await getDoc(userRef);
-                    if (userSnap.exists()) {
-                        const data = userSnap.data();
-                        if (data.status === "Kicked" || data.status === "Disqualified") {
-                            setError("ACCOUNT BANNED: You have been kicked/disqualified from this contest.");
-                            return;
-                        }
+            if (!userDocSnap.exists()) {
+                throw new Error("User not found.");
+            }
+
+            const userData = userDocSnap.data();
+            if (userData.password !== password) {
+                throw new Error("Invalid password.");
+            }
+
+            // 2. "Fake" Sign In (Since we aren't using Firebase Auth for credentials anymore)
+            // We need a way to maintain session. 
+            // The previous "Public Rules" method likely relied on localStorage or similar, OR 
+            // we sign in ANONYMOUSLY to get a UID, but treat them as this email.
+            // Let's use localStorage for simplicity as requested "just like before".
+            localStorage.setItem("contest_user_email", email);
+            localStorage.setItem("contest_user_role", role);
+
+            // NOTE: Since we aren't using Firebase Auth 'signInWithEmailAndPassword',
+            // 'auth.currentUser' will be null unless we do 'signInAnonymously'.
+            // To make RLS work with 'if true' rules, this is fine.
+
+            // 3. Check for Ban/Kick Status
+            if (role === "user") {
+                const userRef = doc(db, "users", email);
+                const userSnap = await getDoc(userRef);
+                if (userSnap.exists()) {
+                    const data = userSnap.data();
+                    if (data.status === "Kicked" || data.status === "Disqualified") {
+                        setError("ACCOUNT BANNED: You have been kicked/disqualified from this contest.");
+                        return;
                     }
                 }
+            }
 
-                if (role === "admin") router.push("/admin");
-                else if (role === "evaluator") router.push("/evaluator");
-                else {
-                    localStorage.setItem("contest_user_email", email);
-                    router.push("/dashboard");
-                }
-            } else {
-                setError("Access Denied: You are not authorized for this role.");
+            if (role === "admin") router.push("/admin");
+            else if (role === "evaluator") router.push("/evaluator");
+            else {
+                localStorage.setItem("contest_user_email", email);
+                router.push("/dashboard");
             }
         } catch (err: any) {
             console.error("Login Check Error:", err);
-            // Improving error messages
-            if (err.code === "auth/invalid-credential" || err.code === "auth/user-not-found" || err.code === "auth/wrong-password") {
-                setError("Invalid email or password.");
-            } else {
-                setError(err.message || "Failed to login.");
-            }
+            setError(err.message || "Failed to login.");
         }
     };
 

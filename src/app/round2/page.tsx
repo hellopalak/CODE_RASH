@@ -1,9 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import AntiCheatGuard from "@/components/AntiCheatGuard";
-import SafeLink from "@/components/SafeLink";
 import { useContest } from "@/context/ContestContext";
+
 import { useRouter } from "next/navigation";
 import { db } from "@/lib/firebase";
 import { doc, setDoc, arrayUnion, onSnapshot } from "firebase/firestore";
@@ -73,7 +72,7 @@ export default function Round2Page() {
     };
 
     return (
-        <AntiCheatGuard allowCopyPaste={true} requireFullScreen={false}>
+        <>
             <div className="container" style={{ marginTop: "50px" }}>
                 <div className="nes-container is-rounded is-dark">
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "20px" }}>
@@ -110,9 +109,9 @@ export default function Round2Page() {
                                     <td>{currentProblem.title}</td>
                                     <td>{currentProblem.difficulty}</td>
                                     <td>
-                                        <SafeLink href={currentProblem.link} className="">
+                                        <a href={currentProblem.link} target="_blank" rel="noopener noreferrer">
                                             <button className="nes-btn is-primary">OPEN PROBLEM</button>
-                                        </SafeLink>
+                                        </a>
                                     </td>
                                 </tr>
                             </tbody>
@@ -145,6 +144,6 @@ export default function Round2Page() {
 
                 </div>
             </div>
-        </AntiCheatGuard>
+        </>
     );
 }

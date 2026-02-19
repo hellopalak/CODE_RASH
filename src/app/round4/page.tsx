@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import AntiCheatGuard from "@/components/AntiCheatGuard";
 import { useRouter } from "next/navigation";
+
 import { db } from "@/lib/firebase";
 import { doc, getDoc, setDoc, arrayUnion } from "firebase/firestore";
 import { useContest } from "@/context/ContestContext";
@@ -81,7 +81,7 @@ export default function Round4Page() {
     };
 
     return (
-        <AntiCheatGuard allowCopyPaste={true}>
+        <>
             <div style={{ position: "relative", minHeight: "100vh" }}>
                 <StarBackground />
 
@@ -176,6 +176,6 @@ export default function Round4Page() {
                     )}
                 </div>
             </div>
-        </AntiCheatGuard>
+        </>
     );
 }

@@ -385,6 +385,12 @@ export default function AdminDashboard() {
         }
     };
 
+    const handleRestore = async (id: string) => {
+        if (confirm("Restore this player back into the game? Their status will be set to Online.")) {
+            await updateDoc(doc(db, "users", id), { status: "Online", warnings: 0 });
+        }
+    };
+
 
 
 
@@ -642,7 +648,7 @@ export default function AdminDashboard() {
                                                     {user.status === "Kicked" && <span className="nes-text is-error">BANNED</span>}
                                                 </td>
                                                 <td style={{ padding: "10px" }}>
-                                                    <div style={{ display: "flex", gap: "5px" }}>
+                                                    <div style={{ display: "flex", gap: "5px", flexWrap: "wrap" }}>
                                                         <button
                                                             className="nes-btn is-error is-small"
                                                             disabled={user.status === "Kicked"}
@@ -652,6 +658,16 @@ export default function AdminDashboard() {
                                                         >
                                                             BAN
                                                         </button>
+                                                        {(user.status === "Kicked" || user.status === "Disqualified") && (
+                                                            <button
+                                                                className="nes-btn is-success is-small"
+                                                                onClick={() => handleRestore(user.id)}
+                                                                title="Restore player"
+                                                                style={{ padding: "5px 10px" }}
+                                                            >
+                                                                ↩ RST
+                                                            </button>
+                                                        )}
                                                         <button
                                                             className="nes-btn is-warning is-small"
                                                             disabled={!user.warnings || user.warnings === 0}

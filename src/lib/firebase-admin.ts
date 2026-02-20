@@ -6,21 +6,25 @@ import path from 'path';
 function initFirebaseAdmin() {
     if (!admin.apps.length) {
         try {
-            // Use fs to read the file directly at runtime.
-            // This avoids Next.js/Webpack trying to bundle the file via require().
-            // process.cwd() is the project root in Next.js server environment.
-            const filePath = path.join(process.cwd(), 'service-account.json');
-            const fileContents = readFileSync(filePath, 'utf8');
-            const serviceAccount = JSON.parse(fileContents);
+            let serviceAccount: object;
+
+            if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+                // Production (Railway): loaded from environment variable
+                serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+            } else {
+                // Local dev: read from service-account.json file on disk
+                // process.cwd() is the project root in Next.js server environment.
+                const filePath = path.join(process.cwd(), 'service-account.json');
+                const fileContents = readFileSync(filePath, 'utf8');
+                serviceAccount = JSON.parse(fileContents);
+            }
 
             admin.initializeApp({
-                credential: admin.credential.cert(serviceAccount)
+                credential: admin.credential.cert(serviceAccount as admin.ServiceAccount)
             });
             console.log("Firebase Admin Initialized Successfully");
         } catch (error) {
             console.error("Firebase Admin Init Error:", error);
-            // We throw/log but the API route calling this should handle it.
-            // If this fails, the API route will error out, which is correct.
         }
     }
     return admin;

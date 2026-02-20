@@ -11,6 +11,7 @@ import StarBackground from "@/components/StarBackground";
 export default function Round4Page() {
     const { currentTimeout, unlockNextRound } = useContest();
     const [figmaLink, setFigmaLink] = useState("");
+    const [driveLink, setDriveLink] = useState("");
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitted, setSubmitted] = useState(false);
@@ -34,20 +35,23 @@ export default function Round4Page() {
                         window.location.href = "/login";
                         return;
                     }
-                    // Check if already completed
+                    // 🔒 Block re-entry if already submitted
                     if (userSnap.data().completedRoundIds?.includes(4)) {
-                        setSubmitted(true);
+                        router.replace("/dashboard");
+                        return;
                     }
                 }
             } catch (e) { console.error("Init error", e); }
 
-            // Load Figma link from Firestore
+            // Load Figma + Drive links from Firestore
             try {
                 const snap = await getDoc(doc(db, "contest_data", "round4"));
-                if (snap.exists() && snap.data().figmaLink) {
-                    setFigmaLink(snap.data().figmaLink);
+                if (snap.exists()) {
+                    const data = snap.data();
+                    if (data.figmaLink) setFigmaLink(data.figmaLink);
+                    if (data.driveLink) setDriveLink(data.driveLink);
                 }
-            } catch (e) { console.error("Error loading figma link", e); }
+            } catch (e) { console.error("Error loading round4 links", e); }
 
             setIsLoading(false);
         };
@@ -116,7 +120,7 @@ export default function Round4Page() {
                             {/* Instructions */}
                             <div className="nes-container is-dark with-title" style={{ marginBottom: "2rem" }}>
                                 <p className="title">INSTRUCTIONS</p>
-                                <ol style={{ color: "#fff", lineHeight: "2rem", paddingLeft: "20px" }}>
+                                <ol style={{ color: "#fff", lineHeight: "2rem", paddingLeft: "30px", listStyleType: "decimal", listStylePosition: "outside" }}>
                                     <li>Open the Figma file below to see the design you need to build.</li>
                                     <li>Open <strong style={{ color: "#F7D51D" }}>VS Code</strong> and code the design using HTML, CSS, and JavaScript.</li>
                                     <li>When done, click <strong style={{ color: "#92cc41" }}>MARK AS SUBMITTED</strong> below to notify the evaluators.</li>
@@ -149,6 +153,35 @@ export default function Round4Page() {
                                     <div style={{ padding: "20px" }}>
                                         <p style={{ color: "orange" }}>⏳ The Figma design file has not been shared yet.</p>
                                         <p style={{ color: "#666", fontSize: "0.8rem" }}>Please wait for the admin to upload the link, then refresh this page.</p>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Drive Asset Library Link */}
+                            <div className="nes-container is-dark with-title" style={{ marginBottom: "2rem", textAlign: "center" }}>
+                                <p className="title">ASSET LIBRARY</p>
+                                {driveLink ? (
+                                    <>
+                                        <p style={{ color: "#aaa", marginBottom: "20px", fontSize: "0.85rem" }}>
+                                            Download the asset library (images, icons, fonts) for use in your design.
+                                        </p>
+                                        <a
+                                            href={driveLink}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            style={{ textDecoration: "none" }}
+                                        >
+                                            <button className="nes-btn is-warning" style={{ fontSize: "1rem", padding: "15px 30px" }}>
+                                                📁 OPEN ASSET LIBRARY
+                                            </button>
+                                        </a>
+                                        <p style={{ marginTop: "15px", fontSize: "0.7rem", color: "#555", wordBreak: "break-all" }}>
+                                            {driveLink}
+                                        </p>
+                                    </>
+                                ) : (
+                                    <div style={{ padding: "20px" }}>
+                                        <p style={{ color: "#555", fontSize: "0.85rem" }}>No asset library has been shared yet.</p>
                                     </div>
                                 )}
                             </div>

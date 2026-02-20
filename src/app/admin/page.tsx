@@ -54,6 +54,9 @@ export default function AdminDashboard() {
     // Round 4 Figma Link
     const [figmaLink, setFigmaLink] = useState("");
     const [figmaLinkInput, setFigmaLinkInput] = useState("");
+    // Round 4 Drive Link (Asset Libraries)
+    const [driveLink, setDriveLink] = useState("");
+    const [driveLinkInput, setDriveLinkInput] = useState("");
 
     // --- CHECK AUTH ---
     useEffect(() => {
@@ -61,11 +64,18 @@ export default function AdminDashboard() {
         const loadFigmaLink = async () => {
             try {
                 const snap = await getDoc(doc(db, "contest_data", "round4"));
-                if (snap.exists() && snap.data().figmaLink) {
-                    setFigmaLink(snap.data().figmaLink);
-                    setFigmaLinkInput(snap.data().figmaLink);
+                if (snap.exists()) {
+                    const data = snap.data();
+                    if (data.figmaLink) {
+                        setFigmaLink(data.figmaLink);
+                        setFigmaLinkInput(data.figmaLink);
+                    }
+                    if (data.driveLink) {
+                        setDriveLink(data.driveLink);
+                        setDriveLinkInput(data.driveLink);
+                    }
                 }
-            } catch (e) { console.error("Error loading figmaLink", e); }
+            } catch (e) { console.error("Error loading round4 links", e); }
         };
         loadFigmaLink();
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -428,6 +438,18 @@ export default function AdminDashboard() {
         }
     };
 
+    const handleSaveDriveLink = async () => {
+        const url = driveLinkInput.trim();
+        if (!url) return;
+        try {
+            await setDoc(doc(db, "contest_data", "round4"), { driveLink: url }, { merge: true });
+            setDriveLink(url);
+            alert("Drive link saved! Players will see it when Round 4 is active.");
+        } catch (e: any) {
+            alert("Error saving drive link: " + e.message);
+        }
+    };
+
     const handleFactoryReset = async () => {
         if (!confirm("ARE YOU SURE? This will erase ALL player scores and round progress. This CANNOT be undone.")) return;
         if (!confirm("SECOND CONFIRMATION: All scores will be reset to 0 for every player. Proceed?")) return;
@@ -757,31 +779,62 @@ export default function AdminDashboard() {
                                 <button className={`nes-btn ${questionTab === "r4" ? "is-error" : ""}`} onClick={() => setQuestionTab("r4")}>Web Dev (R4)</button>
                             </div>
 
-                            {/* ROUND 4 — FIGMA LINK */}
+                            {/* ROUND 4 — FIGMA + DRIVE LINKS */}
                             {questionTab === "r4" && (
-                                <div className="nes-container is-dark with-title">
-                                    <p className="title">Web Development — Figma Design Link</p>
-                                    <p style={{ marginBottom: "15px", color: "#92cc41", fontSize: "0.85rem" }}>
-                                        Players in Round 4 will see a button to open this Figma file. They code the design locally in VS Code.
-                                    </p>
-                                    <div style={{ display: "flex", gap: "10px", alignItems: "flex-start", flexWrap: "wrap" }}>
-                                        <input
-                                            type="text"
-                                            className="nes-input is-dark"
-                                            style={{ flex: 1, minWidth: "300px" }}
-                                            placeholder="https://www.figma.com/file/..."
-                                            value={figmaLinkInput}
-                                            onChange={e => setFigmaLinkInput(e.target.value)}
-                                        />
-                                        <button className="nes-btn is-success" onClick={handleSaveFigmaLink}>
-                                            SAVE LINK
-                                        </button>
-                                    </div>
-                                    {figmaLink && (
-                                        <p style={{ marginTop: "10px", fontSize: "0.8rem" }}>
-                                            ✅ Current: <a href={figmaLink} target="_blank" rel="noreferrer" style={{ color: "#209cee" }}>{figmaLink}</a>
+                                <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+
+                                    {/* Figma Link */}
+                                    <div className="nes-container is-dark with-title">
+                                        <p className="title">Web Development — Figma Design Link</p>
+                                        <p style={{ marginBottom: "15px", color: "#92cc41", fontSize: "0.85rem" }}>
+                                            Players in Round 4 will see a button to open this Figma file. They code the design locally in VS Code.
                                         </p>
-                                    )}
+                                        <div style={{ display: "flex", gap: "10px", alignItems: "flex-start", flexWrap: "wrap" }}>
+                                            <input
+                                                type="text"
+                                                className="nes-input is-dark"
+                                                style={{ flex: 1, minWidth: "300px" }}
+                                                placeholder="https://www.figma.com/file/..."
+                                                value={figmaLinkInput}
+                                                onChange={e => setFigmaLinkInput(e.target.value)}
+                                            />
+                                            <button className="nes-btn is-success" onClick={handleSaveFigmaLink}>
+                                                SAVE LINK
+                                            </button>
+                                        </div>
+                                        {figmaLink && (
+                                            <p style={{ marginTop: "10px", fontSize: "0.8rem" }}>
+                                                ✅ Current: <a href={figmaLink} target="_blank" rel="noreferrer" style={{ color: "#209cee" }}>{figmaLink}</a>
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    {/* Drive Link (Asset Libraries) */}
+                                    <div className="nes-container is-dark with-title">
+                                        <p className="title">Web Development — Asset Library (Drive Link)</p>
+                                        <p style={{ marginBottom: "15px", color: "#209cee", fontSize: "0.85rem" }}>
+                                            Provide a Google Drive link containing asset libraries (images, icons, fonts, etc.) for players to use during Round 4.
+                                        </p>
+                                        <div style={{ display: "flex", gap: "10px", alignItems: "flex-start", flexWrap: "wrap" }}>
+                                            <input
+                                                type="text"
+                                                className="nes-input is-dark"
+                                                style={{ flex: 1, minWidth: "300px" }}
+                                                placeholder="https://drive.google.com/drive/folders/..."
+                                                value={driveLinkInput}
+                                                onChange={e => setDriveLinkInput(e.target.value)}
+                                            />
+                                            <button className="nes-btn is-primary" onClick={handleSaveDriveLink}>
+                                                SAVE LINK
+                                            </button>
+                                        </div>
+                                        {driveLink && (
+                                            <p style={{ marginTop: "10px", fontSize: "0.8rem" }}>
+                                                ✅ Current: <a href={driveLink} target="_blank" rel="noreferrer" style={{ color: "#209cee" }}>{driveLink}</a>
+                                            </p>
+                                        )}
+                                    </div>
+
                                 </div>
                             )}
 

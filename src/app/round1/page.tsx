@@ -15,6 +15,10 @@ export default function Round1Page() {
     const [answers, setAnswers] = useState<Record<number, number>>({});
     const { currentTimeout, unlockNextRound, currentRoundId } = useContest();
     const router = useRouter();
+    // Submit modal state (replaces confirm/alert to avoid AntiCheat false positives)
+    const [showSubmitModal, setShowSubmitModal] = useState(false);
+    const [submitDone, setSubmitDone] = useState(false);
+    const [finalScore, setFinalScore] = useState(0);
 
     // Redirect when Timeout = 0
     useEffect(() => {
@@ -32,12 +36,19 @@ export default function Round1Page() {
             try {
                 const snap = await getDoc(doc(db, "users", myEmail));
                 if (snap.exists()) {
-                    const s = snap.data().status;
+                    const data = snap.data();
+                    const s = data.status;
                     if (s === "Kicked" || s === "Disqualified") {
                         localStorage.removeItem("contest_user_email");
                         localStorage.removeItem("contest_user_role");
                         alert("⛔ You have been disqualified from this contest.");
                         window.location.href = "/login";
+                        return;
+                    }
+                    // 🔒 Block re-entry if already submitted
+                    if (data.completedRoundIds?.includes(1)) {
+                        router.replace("/dashboard");
+                        return;
                     }
                 }
             } catch (e) { console.error("Ban check error", e); }
@@ -87,18 +98,19 @@ export default function Round1Page() {
     };
 
     const handleSubmit = async () => {
-        if (!confirm("Are you sure you want to submit your answers? This cannot be undone.")) return;
+        // Show in-page modal instead of confirm() to avoid triggering AntiCheat blur warnings
+        setShowSubmitModal(true);
+    };
 
+    const handleConfirmSubmit = async () => {
         // Calculate Score: 10 points per correct answer
-        let finalScore = 0;
+        let score = 0;
         questions.forEach((q, idx) => {
             if (answers[idx] === q.answer) {
-                finalScore += 10;
+                score += 10;
             }
         });
-
-        // Normalize to 100? Or keep raw? Previous code was +5.
-        // Let's keep +5. 10 * 5 = 50.
+        setFinalScore(score);
 
         // Save to Firestore
         const myEmail = localStorage.getItem("contest_user_email");
@@ -106,18 +118,18 @@ export default function Round1Page() {
             try {
                 const userRef = doc(db, "users", myEmail);
                 await setDoc(userRef, {
-                    scores: { round1: finalScore },
+                    scores: { round1: score },
                     completedRoundIds: arrayUnion(1)
                 }, { merge: true });
             } catch (e) {
                 console.error("Error saving score:", e);
-                alert("Error saving score! Please screenshot this: " + finalScore);
             }
         }
 
-        alert(`Round 1 Complete! Score: ${finalScore}. Redirecting to Dashboard...`);
+        setSubmitDone(true);
         unlockNextRound();
-        router.push("/dashboard");
+        // Redirect after brief delay so user sees the score
+        setTimeout(() => router.push("/dashboard"), 2500);
     };
 
     const handleDisqualify = () => {
@@ -135,6 +147,34 @@ export default function Round1Page() {
 
     return (
         <AntiCheatGuard onDisqualify={handleDisqualify}>
+
+            {/* In-Page Submit Modal (no confirm/alert to avoid AntiCheat false positives) */}
+            {showSubmitModal && (
+                <div style={{
+                    position: "fixed", top: 0, left: 0, width: "100%", height: "100%",
+                    backgroundColor: "rgba(0,0,0,0.85)", zIndex: 99999,
+                    display: "flex", justifyContent: "center", alignItems: "center"
+                }}>
+                    <div className="nes-container is-dark with-title is-rounded" style={{ minWidth: "320px", textAlign: "center" }}>
+                        {!submitDone ? (
+                            <>
+                                <p className="title">Submit Round 1?</p>
+                                <p style={{ marginBottom: "20px" }}>Are you sure you want to submit?<br />This cannot be undone.</p>
+                                <div style={{ display: "flex", gap: "15px", justifyContent: "center" }}>
+                                    <button className="nes-btn is-success" onClick={handleConfirmSubmit}>YES, SUBMIT</button>
+                                    <button className="nes-btn" onClick={() => setShowSubmitModal(false)}>CANCEL</button>
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <p className="title" style={{ color: "#92cc41" }}>Round 1 Complete!</p>
+                                <p style={{ fontSize: "1.5rem", color: "#F7D51D", margin: "15px 0" }}>Score: {finalScore}</p>
+                                <p style={{ color: "#aaa", fontSize: "0.85rem" }}>Redirecting to Dashboard...</p>
+                            </>
+                        )}
+                    </div>
+                </div>
+            )}
             <div className="container" style={{ marginTop: "50px", maxWidth: "800px" }}>
 
                 {/* Header Info */}

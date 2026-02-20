@@ -5,7 +5,7 @@ import { useContest } from "@/context/ContestContext";
 
 import { useRouter } from "next/navigation";
 import { db } from "@/lib/firebase";
-import { doc, setDoc, arrayUnion, onSnapshot } from "firebase/firestore";
+import { doc, setDoc, arrayUnion, onSnapshot, getDoc } from "firebase/firestore";
 
 export default function Round2Page() {
     const { currentTimeout, unlockNextRound } = useContest();
@@ -18,6 +18,33 @@ export default function Round2Page() {
             router.push("/dashboard");
         }
     }, [currentTimeout, router]);
+
+    // 🚫 Ban Check + Block re-entry on Mount
+    useEffect(() => {
+        const checkAccess = async () => {
+            const myEmail = localStorage.getItem("contest_user_email");
+            if (!myEmail) { window.location.href = "/login"; return; }
+            try {
+                const snap = await getDoc(doc(db, "users", myEmail));
+                if (snap.exists()) {
+                    const data = snap.data();
+                    if (data.status === "Kicked" || data.status === "Disqualified") {
+                        localStorage.removeItem("contest_user_email");
+                        localStorage.removeItem("contest_user_role");
+                        alert("⛔ You have been disqualified from this contest.");
+                        window.location.href = "/login";
+                        return;
+                    }
+                    // 🔒 Block re-entry if already submitted
+                    if (data.completedRoundIds?.includes(2)) {
+                        router.replace("/dashboard");
+                        return;
+                    }
+                }
+            } catch (e) { console.error("Access check error", e); }
+        };
+        checkAccess();
+    }, []);
 
     const [problems, setProblems] = useState<any[]>([
         { id: "1", title: "Watermelon", difficulty: "800", link: "https://codeforces.com/problemset/problem/4/A" },
